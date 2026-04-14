@@ -6,6 +6,8 @@ import { Play, Settings2, Bug, Save, Trash2, Library, Activity } from 'lucide-re
 import axios from 'axios';
 import { useStore } from "@/lib/store";
 import AnalyticsPanel from "@/components/panels/AnalyticsPanel";
+import CostModal from "@/components/panels/CostModal";
+import EventConsole from "@/components/panels/EventConsole";
 
 export default function LabPage() {
   const { nodes, edges, setNodes, setEdges } = useStore();
@@ -16,18 +18,15 @@ export default function LabPage() {
   const [failures, setFailures] = useState<any[]>([]);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [isChaosMode, setIsChaosMode] = useState(false);
+  const [isCostModalOpen, setIsCostModalOpen] = useState(false);
 
   // Gamified AWS Cost Engine Component
   const calculateCost = () => {
-    const CORE_COSTS: Record<string, number> = {
-      client: 0, dns: 5, cdn: 20, load_balancer: 15, api_server: 25, 
-      serverless: 10, worker: 15, cache: 30, database: 50, object_store: 12, message_queue: 35
-    };
-    
+    const { unitCosts } = useStore.getState();
     let total = 0;
     nodes.forEach(n => {
       if (n.type === 'client') return;
-      const baseCost = CORE_COSTS[n.type] || 10;
+      const baseCost = unitCosts[n.type] || 10;
       // @ts-ignore
       const cap = Number(n.data.capacity) || Number(n.data.write_capacity) || 1000;
       total += baseCost * (cap / 1000); // Scaling cost linearly per 1k RPS
@@ -225,10 +224,13 @@ export default function LabPage() {
             <h1 className="text-sm font-semibold tracking-wide text-gray-100">SIM LAB <span className="font-light text-gray-500">v0.1.0</span></h1>
           </div>
           
-          <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-md">
+          <button 
+            onClick={() => setIsCostModalOpen(true)}
+            className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-md hover:bg-emerald-500/20 transition-colors cursor-pointer"
+          >
              <span className="text-xs text-emerald-500/70 font-medium tracking-wide">EST MONTHLY COST</span>
              <span className="text-sm font-mono font-bold text-emerald-400">${calculateCost().toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}/mo</span>
-          </div>
+          </button>
         </div>
         
         <div className="flex items-center gap-4">
@@ -303,25 +305,6 @@ export default function LabPage() {
 
         {/* Right Sidebar (Properties & Failures) */}
         <aside className="w-80 border-l border-white/10 bg-black/40 p-5 relative z-10 backdrop-blur flex flex-col overflow-y-auto">
-          {/* Explanation Panel */}
-          {timelineData?.explanation && (
-             <div className="mb-6 rounded-xl border border-blue-500/30 bg-blue-500/5 p-4 shadow-[0_0_20px_rgba(59,130,246,0.1)]">
-                <h3 className="mb-2 text-xs font-semibold uppercase text-blue-400">Analysis Engine</h3>
-                <p className="text-sm text-gray-300 leading-relaxed mb-3">
-                  {timelineData.explanation.narrative}
-                </p>
-                {timelineData.explanation.recommendations.length > 0 && (
-                  <div className="mt-3 border-t border-blue-500/20 pt-3">
-                    <h4 className="mb-2 text-xs font-medium text-blue-400/80">Recommendations</h4>
-                    <ul className="list-disc pl-4 text-xs text-gray-400 space-y-1">
-                      {timelineData.explanation.recommendations.map((r: string, i: number) => (
-                        <li key={i}>{r}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-             </div>
-          )}
 
           <div className="flex items-center gap-2 mb-4 border-b border-white/10 pb-4">
              <Settings2 size={16} className="text-gray-400"/>
@@ -439,11 +422,20 @@ export default function LabPage() {
           >
              Trigger Traffic Spike (3x)
           </button>
+
+          {/* Real-time Console */}
+          <EventConsole history={streamHistory} />
+
         </aside>
       </div>
       
       {/* Analytics Panel Bottom Rack */}
       <AnalyticsPanel history={streamHistory} />
+
+      {/* Popups */}
+      {isCostModalOpen && (
+        <CostModal onClose={() => setIsCostModalOpen(false)} />
+      )}
 
     </div>
   );

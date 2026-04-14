@@ -17,10 +17,12 @@ def apply_failures(nodes: Dict[str, BaseNodeData], tick: int, failures: List[Dic
         if f.get("start_tick", 0) <= tick and f.get("end_tick", 999999) >= tick:
             node_id = f.get("node_id")
             if node_id in nodes:
+                if getattr(nodes[node_id], "status", "") != "failed":
+                    events.append(f"Injected failure at {node_id}")
                 nodes[node_id].status = "failed"
                 nodes[node_id].capacity = 0.0  # complete failure
-                nodes[node_id].write_capacity = 0.0 # apply to dbs
-                events.append(f"Injected failure at {node_id}")
+                if hasattr(nodes[node_id], "write_capacity"):
+                    nodes[node_id].write_capacity = 0.0
     return events
 
 def run_simulation(graph: CanvasGraph, duration_ticks: int, failures: List[Dict[str, Any]]) -> List[SimulationTickResult]:
@@ -102,9 +104,9 @@ def run_simulation(graph: CanvasGraph, duration_ticks: int, failures: List[Dict[
                     if b_lat is None: b_lat = 10.0
                     node.latency = b_lat + (node.queue_depth * 0.5)
                     
-                    node.status = "critical"
-                    if getattr(node, "type", "") != "client":
+                    if getattr(node, "type", "") != "client" and getattr(node, "status", "") != "critical":
                         tick_events.append(f"Capacity exceeded at {node_id}")
+                    node.status = "critical"
                 else:
                     node.throughput = incoming_rps
                     node.drop_rate = 0.0
@@ -207,9 +209,9 @@ async def run_simulation_stream(graph: CanvasGraph, duration_ticks: int, failure
                     if b_lat is None: b_lat = 10.0
                     node.latency = b_lat + (node.queue_depth * 0.5)
                     
-                    node.status = "critical"
-                    if getattr(node, "type", "") != "client":
+                    if getattr(node, "type", "") != "client" and getattr(node, "status", "") != "critical":
                         tick_events.append(f"Capacity exceeded at {node_id}")
+                    node.status = "critical"
                 else:
                     node.throughput = incoming_rps
                     node.drop_rate = 0.0

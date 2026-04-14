@@ -32,11 +32,18 @@ export type AppState = {
   onConnect: OnConnect;
   setNodes: (nodes: Node<NodeData>[] | ((prev: Node<NodeData>[]) => Node<NodeData>[])) => void;
   setEdges: (edges: Edge[] | ((prev: Edge[]) => Edge[])) => void;
+  
+  unitCosts: Record<string, number>;
+  setUnitCost: (type: string, cost: number) => void;
 };
 
 export const useStore = create<AppState>((set, get) => ({
   nodes: [],
   edges: [],
+  unitCosts: {
+    client: 0, dns: 5, cdn: 20, load_balancer: 15, api_server: 25, 
+    serverless: 10, worker: 15, cache: 30, database: 50, object_store: 12, message_queue: 35
+  },
   onNodesChange: (changes: NodeChange[]) => {
     set({
       nodes: applyNodeChanges(changes, get().nodes) as Node<NodeData>[],
@@ -62,4 +69,9 @@ export const useStore = create<AppState>((set, get) => ({
       edges: typeof edgesOrUpdater === 'function' ? edgesOrUpdater(state.edges) : edgesOrUpdater 
     }));
   },
+  setUnitCost: (type, cost) => {
+    set(state => ({
+      unitCosts: { ...state.unitCosts, [type]: cost }
+    }));
+  }
 }));
