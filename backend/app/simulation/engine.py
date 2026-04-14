@@ -67,9 +67,10 @@ def run_simulation(graph: CanvasGraph, duration_ticks: int, failures: List[Dict[
             else:
                 incoming_edges = list(G.predecessors(node_id))
                 for pred in incoming_edges:
-                    pred_successors_count = len(list(G.successors(pred)))
-                    split_factor = max(1, pred_successors_count)
-                    incoming_rps += current_state[pred].throughput / split_factor
+                    active_succ = [s for s in G.successors(pred) if getattr(current_state[s], "status", "healthy") != "failed"]
+                    if node_id in active_succ:
+                        split_factor = max(1, len(active_succ))
+                        incoming_rps += current_state[pred].throughput / split_factor
                     
             # M/M/1 and Little's Law Logic (simplified)
             capacity = getattr(node, "capacity", None)
@@ -176,9 +177,10 @@ async def run_simulation_stream(graph: CanvasGraph, duration_ticks: int, failure
             else:
                 incoming_edges = list(G.predecessors(node_id))
                 for pred in incoming_edges:
-                    pred_successors_count = len(list(G.successors(pred)))
-                    split_factor = max(1, pred_successors_count)
-                    incoming_rps += current_state[pred].throughput / split_factor
+                    active_succ = [s for s in G.successors(pred) if getattr(current_state[s], "status", "healthy") != "failed"]
+                    if node_id in active_succ:
+                        split_factor = max(1, len(active_succ))
+                        incoming_rps += current_state[pred].throughput / split_factor
                     
             capacity = getattr(node, "capacity", None)
             if capacity is None: capacity = 1000.0
