@@ -20,7 +20,22 @@ export default function EventConsole({ history }: EventConsoleProps) {
         let type = "info";
         
         if (evt.includes("CHAOS DAEMON")) {
-          rec = "Deploy redundant sibling cluster to heal grid.";
+          // Context-aware Chaos Recommendations
+          if (evt.includes("db_") || evt.includes("database") || evt.includes("cassandra")) {
+             rec = "Promote Read Replica to Master or increase DB IOPS.";
+          } else if (evt.includes("cdn_") || evt.includes("dns")) {
+             rec = "Shift edge routing to adjacent geographic POP.";
+          } else if (evt.includes("api_") || evt.includes("svc") || evt.includes("server")) {
+             rec = "Auto-scale API pods or implement aggressive caching.";
+          } else if (evt.includes("mq_") || evt.includes("kafka")) {
+             rec = "Increase topic partitions and scale consumer worker groups.";
+          } else if (evt.includes("work_") || evt.includes("encoder") || evt.includes("flink")) {
+             rec = "Scale Horizontal Pod Autoscaler to process backlog queue.";
+          } else if (evt.includes("alb_") || evt.includes("lb") || evt.includes("gateway")) {
+             rec = "Scale up ingress load balancer capacity matrix.";
+          } else {
+             rec = "Deploy redundant sibling cluster to heal grid.";
+          }
           type = "chaos";
         } else if (evt.includes("Capacity exceeded")) {
           rec = "Scale horizontally or increase processing capacity.";

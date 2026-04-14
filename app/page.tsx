@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import LabCanvas from "@/components/canvas/LabCanvas";
-import { Play, Settings2, Bug, Save, Trash2, Library, Activity } from 'lucide-react';
+import { Play, Settings2, Bug, Save, Trash2, Library, Activity, Download, Upload } from 'lucide-react';
 import axios from 'axios';
 import { useStore } from "@/lib/store";
 import AnalyticsPanel from "@/components/panels/AnalyticsPanel";
@@ -128,6 +128,38 @@ export default function LabPage() {
         setNodes(nodes.map(n => n.id === clientNode.id ? { ...n, data: { ...n.data, base_rps: (n.data.base_rps as number || 100) * 3 } } : n));
         showToast(`Traffic Spike! ${clientNode.data.label} base traffic tripled!`);
       }
+    }
+  };
+
+  const exportBlueprint = () => {
+    const data = JSON.stringify({ nodes, edges }, null, 2);
+    const blob = new Blob([data], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `blueprint-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast("Blueprint Exported Successfully!");
+  };
+
+  const importBlueprint = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        try {
+          const data = JSON.parse(evt.target?.result as string);
+          if (data.nodes && data.edges) {
+            setNodes(data.nodes);
+            setEdges(data.edges);
+            showToast("Blueprint Imported!");
+          }
+        } catch (err) {
+          showToast("Error: Invalid Blueprint JSON file");
+        }
+      };
+      reader.readAsText(file);
     }
   };
 
@@ -258,6 +290,23 @@ export default function LabPage() {
               ))}
             </select>
           )}
+
+          <div className="flex items-center gap-2 border border-white/10 p-1 rounded-lg bg-black/60">
+            <button 
+              onClick={exportBlueprint}
+              title="Export Blueprint"
+              className="p-1.5 hover:bg-white/10 rounded transition-colors text-gray-400 hover:text-emerald-400"
+            >
+              <Download size={14} />
+            </button>
+            <label 
+              title="Import Blueprint"
+              className="p-1.5 hover:bg-white/10 rounded transition-colors text-gray-400 hover:text-emerald-400 cursor-pointer"
+            >
+              <Upload size={14} />
+              <input type="file" accept=".json" className="hidden" onChange={importBlueprint} />
+            </label>
+          </div>
 
           <div className="h-4 w-[1px] bg-white/10"></div>
           <button 
