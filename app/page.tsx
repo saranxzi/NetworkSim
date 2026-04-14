@@ -2,17 +2,38 @@
 
 import { useState, useEffect } from "react";
 import LabCanvas from "@/components/canvas/LabCanvas";
-import { Play, Settings2, Bug, Save, Trash2, Library } from 'lucide-react';
+import { Play, Settings2, Bug, Save, Trash2, Library, Activity } from 'lucide-react';
 import axios from 'axios';
 import { useStore } from "@/lib/store";
+import AnalyticsPanel from "@/components/panels/AnalyticsPanel";
 
 export default function LabPage() {
   const { nodes, edges, setNodes, setEdges } = useStore();
   const [isRunning, setIsRunning] = useState(false);
   const [timelineData, setTimelineData] = useState<any>(null);
+  const [streamHistory, setStreamHistory] = useState<any[]>([]);
   const [templates, setTemplates] = useState<any[]>([]);
   const [failures, setFailures] = useState<any[]>([]);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [isChaosMode, setIsChaosMode] = useState(false);
+
+  // Gamified AWS Cost Engine Component
+  const calculateCost = () => {
+    const CORE_COSTS: Record<string, number> = {
+      client: 0, dns: 5, cdn: 20, load_balancer: 15, api_server: 25, 
+      serverless: 10, worker: 15, cache: 30, database: 50, object_store: 12, message_queue: 35
+    };
+    
+    let total = 0;
+    nodes.forEach(n => {
+      if (n.type === 'client') return;
+      const baseCost = CORE_COSTS[n.type] || 10;
+      // @ts-ignore
+      const cap = Number(n.data.capacity) || Number(n.data.write_capacity) || 1000;
+      total += baseCost * (cap / 1000); // Scaling cost linearly per 1k RPS
+    });
+    return total;
+  };
 
   const showToast = (msg: string) => {
     setToastMsg(msg);
@@ -113,34 +134,75 @@ export default function LabPage() {
 
   const handleRunSimulation = async () => {
     setIsRunning(true);
+    setTimelineData(null); // Clear previous analysis
+    setStreamHistory([]); // Clear graph
     try {
       const graph = {
         nodes: nodes.reduce((acc, n) => ({ ...acc, [n.id]: n.data }), {}),
         edges: edges.map(e => ({ source: e.source, target: e.target }))
       };
       
-      const res = await axios.post('http://localhost:8000/simulate', {
-        graph,
-        duration_ticks: 60,
-        failures_injected: failures
-      });
+      const ws = new WebSocket('ws://localhost:8000/ws/simulate');
+      const localHistory: any[] = [];
       
-      setTimelineData(res.data);
-      
-      if (res.data.history && res.data.history.length > 0) {
-        const finalNodes = res.data.history[res.data.history.length - 1].nodes;
-        setNodes(nodes.map(n => ({
-          ...n,
-          data: { ...n.data, ...finalNodes[n.id] }
-        })));
-      }
+      ws.onopen = () => {
+        ws.send(JSON.stringify({
+          graph,
+          duration_ticks: 60,
+          failures_injected: failures,
+          chaos_mode: isChaosMode
+        }));
+      };
+
+      ws.onmessage = (event) => {
+        const tickData = JSON.parse(event.data);
+        localHistory.push(tickData);
+        setStreamHistory([...localHistory]);
+        
+        // Visually render the tick!
+        setNodes(currentNodes => currentNodes.map(n => {
+          const liveProps = tickData.nodes[n.id];
+          if (liveProps) {
+            return { ...n, data: { ...n.data, ...liveProps } };
+          }
+          return n;
+        }));
+      };
+
+      ws.onclose = async () => {
+        // Stream finished! Get Analysis!
+        try {
+          const analyzeRes = await axios.post('http://localhost:8000/analyze', {
+            history: localHistory,
+            graph
+          });
+          
+          setTimelineData({
+            history: localHistory,
+            explanation: analyzeRes.data
+          });
+        } catch (err) {
+          console.error("Analysis Failed", err);
+          showToast("Analysis Engine unreachable.");
+        }
+        
+        // Cleanup
+        setTimeout(() => {
+          setIsRunning(false);
+          setFailures([]); 
+        }, 1000);
+      };
+
+      ws.onerror = (error) => {
+        console.error("WebSocket Error:", error);
+        setIsRunning(false);
+        showToast("Simulation connection failed.");
+      };
       
     } catch (e) {
       console.error(e);
-      showToast("Backend unreachable! Did you run start_lab.bat with --reload?");
-    } finally {
+      showToast("Simulation Initialization Failed.");
       setIsRunning(false);
-      setFailures([]); // reset failures after run
     }
   };
 
@@ -157,12 +219,31 @@ export default function LabPage() {
 
       {/* Top Navbar */}
       <header className="flex h-14 items-center justify-between border-b border-white/10 bg-black/50 px-6 backdrop-blur-md z-10">
-        <div className="flex items-center gap-3">
-          <div className="h-6 w-6 rounded-md border border-purple-500/50 bg-gradient-to-tr from-purple-600/80 to-blue-500/80 shadow-[0_0_10px_rgba(147,51,234,0.3)]"></div>
-          <h1 className="text-sm font-semibold tracking-wide text-gray-100">SIM LAB <span className="font-light text-gray-500">v0.1.0</span></h1>
+        <div className="flex items-center gap-6">
+          <div className="flex items-center gap-3">
+            <div className="h-6 w-6 rounded-md border border-purple-500/50 bg-gradient-to-tr from-purple-600/80 to-blue-500/80 shadow-[0_0_10px_rgba(147,51,234,0.3)]"></div>
+            <h1 className="text-sm font-semibold tracking-wide text-gray-100">SIM LAB <span className="font-light text-gray-500">v0.1.0</span></h1>
+          </div>
+          
+          <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-md">
+             <span className="text-xs text-emerald-500/70 font-medium tracking-wide">EST MONTHLY COST</span>
+             <span className="text-sm font-mono font-bold text-emerald-400">${calculateCost().toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}/mo</span>
+          </div>
         </div>
         
         <div className="flex items-center gap-4">
+          <label className="flex items-center gap-2 cursor-pointer border border-white/10 bg-black px-3 py-1.5 rounded-lg hover:bg-white/5 transition-colors">
+            <input 
+              type="checkbox" 
+              checked={isChaosMode} 
+              onChange={e => setIsChaosMode(e.target.checked)} 
+              className="accent-purple-500 w-4 h-4 cursor-pointer"
+            />
+            <span className={`text-xs font-semibold ${isChaosMode ? 'text-purple-400 drop-shadow-[0_0_5px_rgba(168,85,247,0.8)]' : 'text-gray-400'}`}>CHAOS DAEMON</span>
+          </label>
+          
+          <div className="h-4 w-[1px] bg-white/10"></div>
+          
           {templates.length > 0 && (
             <select 
               onChange={(e) => loadTemplate(e.target.value)} 
@@ -360,6 +441,9 @@ export default function LabPage() {
           </button>
         </aside>
       </div>
+      
+      {/* Analytics Panel Bottom Rack */}
+      <AnalyticsPanel history={streamHistory} />
 
     </div>
   );

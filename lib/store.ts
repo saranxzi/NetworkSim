@@ -30,8 +30,8 @@ export type AppState = {
   onNodesChange: OnNodesChange;
   onEdgesChange: OnEdgesChange;
   onConnect: OnConnect;
-  setNodes: (nodes: Node<NodeData>[]) => void;
-  setEdges: (edges: Edge[]) => void;
+  setNodes: (nodes: Node<NodeData>[] | ((prev: Node<NodeData>[]) => Node<NodeData>[])) => void;
+  setEdges: (edges: Edge[] | ((prev: Edge[]) => Edge[])) => void;
 };
 
 export const useStore = create<AppState>((set, get) => ({
@@ -52,10 +52,14 @@ export const useStore = create<AppState>((set, get) => ({
       edges: addEdge(connection, get().edges),
     });
   },
-  setNodes: (nodes) => {
-    set({ nodes });
+  setNodes: (nodesOrUpdater) => {
+    set((state) => ({ 
+      nodes: typeof nodesOrUpdater === 'function' ? nodesOrUpdater(state.nodes) : nodesOrUpdater 
+    }));
   },
-  setEdges: (edges) => {
-    set({ edges });
+  setEdges: (edgesOrUpdater) => {
+    set((state) => ({ 
+      edges: typeof edgesOrUpdater === 'function' ? edgesOrUpdater(state.edges) : edgesOrUpdater 
+    }));
   },
 }));
