@@ -41,6 +41,9 @@ export default function AnalyticsPanel({ history }: AnalyticsPanelProps) {
     });
   }, [history]);
 
+  const cumulativeDropped = useMemo(() => chartData.reduce((acc, curr) => acc + curr.Dropped, 0), [chartData]);
+  const isCompromised = cumulativeDropped > 0;
+
   if (!history || history.length === 0) {
     return (
       <div className="flex h-48 w-full items-center justify-center border-t border-white/10 bg-black/60 backdrop-blur">
@@ -58,18 +61,29 @@ export default function AnalyticsPanel({ history }: AnalyticsPanelProps) {
           <span className="text-xs text-gray-400">Total Throughput</span>
           <span className="text-xs font-mono text-emerald-400">{chartData[chartData.length - 1]?.Throughput.toLocaleString()} rps</span>
         </div>
-        <div className="flex justify-between items-center mb-2">
+        <div className="flex justify-between items-center mb-4">
           <span className="text-xs text-gray-400">Total Backlog</span>
           <span className="text-xs font-mono text-amber-400">{chartData[chartData.length - 1]?.QueueDepth.toLocaleString()} reqs</span>
         </div>
-        <div className="flex justify-between items-center">
-          <span className="text-xs text-gray-400">Drop Rate</span>
-          <span className="text-xs font-mono text-red-500">{chartData[chartData.length - 1]?.Dropped.toLocaleString()} lost</span>
+        
+        <div className="mt-auto border-t border-white/10 pt-3">
+          <div className="flex justify-between items-center mb-1">
+            <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Grid Status</span>
+            <span className={`text-[10px] font-bold uppercase tracking-wider ${isCompromised ? 'text-red-500' : 'text-emerald-500'}`}>
+               {isCompromised ? 'Compromised' : 'Flawless'}
+            </span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-[10px] text-gray-500 tracking-wider">Total Data Lost</span>
+            <span className={`text-[10px] font-mono font-semibold ${isCompromised ? 'text-red-400' : 'text-gray-400'}`}>
+               {cumulativeDropped.toLocaleString()} packets
+            </span>
+          </div>
         </div>
       </div>
       
-      <div className="flex-1 pl-4 h-full min-w-0">
-        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+      <div className="flex-1 pl-4 h-full min-w-0 min-h-0">
+        <ResponsiveContainer width="99%" height="100%">
           <LineChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" vertical={false} />
             <XAxis dataKey="tick" stroke="#686868" fontSize={10} tickMargin={10} />
