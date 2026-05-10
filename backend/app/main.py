@@ -1,22 +1,70 @@
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
-from fastapi.middleware.cors import CORSMiddleware
-from typing import Dict, Any
-import json
+"""NetworkSim API — FastAPI application with lifecycle management."""
 
-from app.models import SimulationRequest, SimulationResponse, ExplanationOutput
-from app.simulation.engine import run_simulation, run_simulation_stream
+import logging
+from contextlib import asynccontextmanager
+from typing import List
+
+from fastapi import FastAPI, HTTPException, WebSocket, Depends
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+
+from app.models import SimulationRequest, SimulationResponse, ExplanationOutput, SimulationTickResult, CanvasGraph
+from networksim import run_simulation
 from app.simulation.analyzer import analyze_simulation
 from app.templates import get_templates
+from app.deps import get_current_user, get_optional_user, CurrentUser
 
-app = FastAPI(title="Distributed Systems Lab API")
+logger = logging.getLogger(__name__)
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application startup/shutdown lifecycle."""
+    # Startup
+    from app.logging_config import setup_logging
+    from app.db import init_db
+    from app.cache import init_redis
+    
+    setup_logging()
+    await init_db()
+    await init_redis()
+    logger.info("NetworkSim API started")
+    
+    yield
+    
+    # Shutdown
+    from app.db import close_db
+    from app.cache import close_redis
+    
+    await close_redis()
+    await close_db()
+    logger.info("NetworkSim API stopped")
+
+
+app = FastAPI(title="Distributed Systems Lab API", lifespan=lifespan)
+
+# Restrict CORS origins to known frontends
+import os
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[FRONTEND_URL, "http://localhost:3000", "http://127.0.0.1:3000"],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["*"],
 )
+
+# --- Mount API routers ---
+from app.routes.blueprints import router as blueprints_router
+from app.routes.runs import router as runs_router
+from app.routes.finops import router as finops_router
+
+app.include_router(blueprints_router, prefix="/api/blueprints", tags=["blueprints"])
+app.include_router(runs_router, prefix="/api/runs", tags=["runs"])
+app.include_router(finops_router, prefix="/api/finops", tags=["finops"])
+
+
+# --- Existing routes (backward compatible) ---
 
 @app.get("/")
 def health_check():
@@ -29,22 +77,16 @@ def list_templates():
 @app.post("/simulate", response_model=SimulationResponse)
 def simulate(req: SimulationRequest):
     try:
-        # 1. Run TICK based simulation
-        history = run_simulation(req.graph, req.duration_ticks, req.failures_injected)
-        
-        # 2. Analyze results to build explanation
+        history = run_simulation(req.graph, req.duration_ticks, req.failures_injected, seed=getattr(req, "seed", 0))
         explanation = analyze_simulation(history, req.graph)
-        
         return SimulationResponse(
             history=history,
             explanation=explanation
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Simulation failed")
+        raise HTTPException(status_code=500, detail="Simulation engine encountered an internal error.")
 
-from typing import List
-from app.models import SimulationTickResult, CanvasGraph
-from pydantic import BaseModel
 
 class AnalyzeRequest(BaseModel):
     history: List[SimulationTickResult]
@@ -55,32 +97,11 @@ def analyze_endpoint(req: AnalyzeRequest):
     try:
         return analyze_simulation(req.history, req.graph)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Analysis failed")
+        raise HTTPException(status_code=500, detail="Analysis engine encountered an internal error.")
 
 @app.websocket("/ws/simulate")
 async def websocket_simulate(websocket: WebSocket):
-    await websocket.accept()
-    try:
-        data = await websocket.receive_text()
-        payload = json.loads(data)
-        
-        # Manually construct Pydantic models from dict for the stream
-        from app.models import CanvasGraph
-        graph_obj = CanvasGraph(**payload.get("graph", {}))
-        duration = payload.get("duration_ticks", 60)
-        failures = payload.get("failures_injected", [])
-        chaos_mode = payload.get("chaos_mode", False)
-        
-        # Async stream
-        async for tick_result in run_simulation_stream(graph_obj, duration, failures, chaos_mode):
-            await websocket.send_text(tick_result.model_dump_json())
-            
-        await websocket.close()
-    except WebSocketDisconnect:
-        print("Client disconnected")
-    except Exception as e:
-        print(f"WS Error: {e}")
-        try:
-            await websocket.close(code=1011)
-        except:
-            pass
+    """Delegates to the dedicated WebSocket handler with backpressure support."""
+    from app.ws_handler import handle_simulation_ws
+    await handle_simulation_ws(websocket)
