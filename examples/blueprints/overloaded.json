@@ -1,0 +1,26 @@
+{
+  "nodes": {
+    "users": {
+      "label": "Traffic Flood",
+      "type": "client",
+      "base_rps": 2000.0,
+      "burst_factor": 1.0
+    },
+    "api": {
+      "label": "API Server",
+      "type": "api_server",
+      "capacity": 500.0,
+      "base_latency": 20.0
+    },
+    "db": {
+      "label": "Database",
+      "type": "database",
+      "write_capacity": 100.0,
+      "base_latency": 40.0
+    }
+  },
+  "edges": [
+    {"source": "users", "target": "api"},
+    {"source": "api", "target": "db"}
+  ]
+}

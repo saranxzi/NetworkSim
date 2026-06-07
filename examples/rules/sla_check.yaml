@@ -1,0 +1,24 @@
+version: "1.0"
+scenario: "E-Commerce SLA Validation"
+duration_ticks: 60
+
+invariants:
+  - name: "API Gateway Latency SLA"
+    target: "*"
+    rule: "latency < 500"
+    severity: "critical"
+
+  - name: "Zero Packet Loss"
+    target: "*"
+    rule: "drop_rate == 0"
+    severity: "critical"
+
+  - name: "Queue Depth Limit"
+    target: "*"
+    rule: "queue_depth < 1000"
+    severity: "warning"
+
+  - name: "No Failed Nodes"
+    target: "*"
+    rule: "status != 'failed'"
+    severity: "critical"
