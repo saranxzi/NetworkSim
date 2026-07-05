@@ -8,11 +8,12 @@ import {
   MiniMap,
   useReactFlow,
   ReactFlowProvider,
-  BackgroundVariant
+  BackgroundVariant,
+  type Node
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-import { useStore } from '@/lib/store';
+import { useStore, type NodeData } from '@/lib/store';
 import { nodeTypes } from '../nodes/CustomNodes';
 
 function Flow() {
@@ -36,7 +37,7 @@ function Flow() {
         y: event.clientY,
       });
 
-      let defaultData: any = {};
+      let defaultData: Record<string, unknown> = {};
       if (data.type === 'client') defaultData = { base_rps: 150 };
       else if (data.type === 'load_balancer') defaultData = { capacity: 5000 };
       else if (data.type === 'api_server') defaultData = { capacity: 1000 };
@@ -49,14 +50,14 @@ function Flow() {
       else if (data.type === 'serverless') defaultData = { capacity: 5000 };
       else if (data.type === 'worker') defaultData = { capacity: 500 };
 
-      const newNode = {
+      const newNode: Node<NodeData> = {
         id: `${data.type}_${Date.now()}`,
         type: data.type,
         position,
         data: { label: data.label, type: data.type, ...defaultData },
       };
 
-      setNodes([...nodes, newNode as any]);
+      setNodes([...nodes, newNode]);
     },
     [nodes, setNodes, screenToFlowPosition],
   );

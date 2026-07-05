@@ -11,32 +11,20 @@ import {
   ResponsiveContainer,
   Legend
 } from 'recharts';
+import { useStore } from '@/lib/store';
 
-interface AnalyticsPanelProps {
-  history: any[];
-}
-
-export default function AnalyticsPanel({ history }: AnalyticsPanelProps) {
+export default function AnalyticsPanel() {
+  const history = useStore(state => state.buffer);
+  
   const chartData = useMemo(() => {
     if (!history) return [];
     
     return history.map(tick => {
-      let totalThroughput = 0;
-      let totalQueue = 0;
-      let totalDropped = 0;
-      
-      const nodes = Object.values(tick.nodes) as any[];
-      nodes.forEach(n => {
-        totalThroughput += n.throughput || 0;
-        totalQueue += n.queue_depth || 0;
-        totalDropped += n.drop_rate || 0;
-      });
-      
       return {
         tick: tick.tick,
-        Throughput: Math.round(totalThroughput),
-        QueueDepth: totalQueue,
-        Dropped: totalDropped
+        Throughput: Math.round(tick.totalThroughput),
+        QueueDepth: tick.totalQueue,
+        Dropped: tick.totalDropped
       };
     });
   }, [history]);

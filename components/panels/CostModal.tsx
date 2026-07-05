@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { useStore } from '@/lib/store';
-import { X, DollarSign, Activity } from 'lucide-react';
+import { X, DollarSign } from 'lucide-react';
 
 interface CostModalProps {
   onClose: () => void;
@@ -17,15 +17,14 @@ export default function CostModal({ onClose }: CostModalProps) {
 
   nodes.forEach(n => {
     if (n.type === 'client') return;
-    const type = n.type || 'unknown';
+    const type = n.type ?? 'unknown';
     if (!breakdowns[type]) {
-      breakdowns[type] = { count: 0, totalCapacity: 0, costStr: n.data.label as string };
+      breakdowns[type] = { count: 0, totalCapacity: 0, costStr: String(n.data.label ?? 'Node') };
     }
     
     breakdowns[type].count += 1;
-    breakdowns[type].costStr = (n.data.label as string).split(' ')[0]; // rough label
+    breakdowns[type].costStr = String(n.data.label ?? 'Node').split(' ')[0] ?? 'Node';
     
-    // @ts-ignore
     const cap = Number(n.data.capacity) || Number(n.data.write_capacity) || 1000;
     breakdowns[type].totalCapacity += cap;
     
@@ -67,7 +66,7 @@ export default function CostModal({ onClose }: CostModalProps) {
               if (type === 'client') return null;
               
               const stats = breakdowns[type];
-              const costThisType = stats ? (unitCosts[type] * (stats.totalCapacity / 1000)) : 0;
+              const costThisType = stats ? ((unitCosts[type] ?? 0) * (stats.totalCapacity / 1000)) : 0;
               const percent = totalCost > 0 ? ((costThisType / totalCost) * 100).toFixed(1) : 0;
               
               return (

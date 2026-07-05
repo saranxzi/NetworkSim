@@ -1,13 +1,31 @@
 "use client"
+import React, { memo } from 'react';
 import { Handle, Position } from '@xyflow/react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { MonitorPlay, Server, Database, Layers, ArrowLeftRight, HardDrive, Globe, Network, Package, Zap, Cpu, type LucideIcon } from 'lucide-react';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function BaseNode({ data, icon: Icon, colorClass }: any) {
+interface BaseNodeProps {
+  data: {
+    label: string;
+    type: string;
+    status?: "healthy" | "warning" | "critical" | "failed";
+    throughput?: number;
+    latency?: number;
+    queue_depth?: number;
+    capacity?: number;
+    write_capacity?: number;
+    [key: string]: unknown;
+  };
+  icon: LucideIcon;
+  colorClass: string;
+}
+
+export const BaseNode = memo(function BaseNode({ data, icon: Icon, colorClass }: BaseNodeProps) {
   // Determine health color ring
   let healthBorder = "border-gray-700/50";
   let healthGlow = "shadow-none";
@@ -79,22 +97,32 @@ export function BaseNode({ data, icon: Icon, colorClass }: any) {
       <Handle type="source" position={Position.Right} className="w-3 h-3 bg-gray-400 border-2 border-black" />
     </div>
   );
-}
+});
 
-// Implement specific node wrappers
-import { MonitorPlay, Server, Database, Layers, ArrowLeftRight, HardDrive, Globe, Network, Package, Zap, Cpu } from 'lucide-react';
+// Implement specific node wrappers — each wrapped in memo for render isolation
+export const ClientNode = memo((props: { data: BaseNodeProps['data'] }) => <BaseNode {...props} icon={MonitorPlay} colorClass="bg-blue-500/20 text-blue-400" />);
+export const LoadBalancerNode = memo((props: { data: BaseNodeProps['data'] }) => <BaseNode {...props} icon={ArrowLeftRight} colorClass="bg-purple-500/20 text-purple-400" />);
+export const ApiServerNode = memo((props: { data: BaseNodeProps['data'] }) => <BaseNode {...props} icon={Server} colorClass="bg-emerald-500/20 text-emerald-400" />);
+export const CacheNode = memo((props: { data: BaseNodeProps['data'] }) => <BaseNode {...props} icon={Layers} colorClass="bg-yellow-500/20 text-yellow-400" />);
+export const DatabaseNode = memo((props: { data: BaseNodeProps['data'] }) => <BaseNode {...props} icon={Database} colorClass="bg-rose-500/20 text-rose-400" />);
+export const MessageQueueNode = memo((props: { data: BaseNodeProps['data'] }) => <BaseNode {...props} icon={HardDrive} colorClass="bg-cyan-500/20 text-cyan-400" />);
+export const CdnNode = memo((props: { data: BaseNodeProps['data'] }) => <BaseNode {...props} icon={Network} colorClass="bg-orange-500/20 text-orange-400" />);
+export const DnsNode = memo((props: { data: BaseNodeProps['data'] }) => <BaseNode {...props} icon={Globe} colorClass="bg-indigo-500/20 text-indigo-400" />);
+export const ObjectStoreNode = memo((props: { data: BaseNodeProps['data'] }) => <BaseNode {...props} icon={Package} colorClass="bg-amber-700/20 text-amber-500" />);
+export const ServerlessNode = memo((props: { data: BaseNodeProps['data'] }) => <BaseNode {...props} icon={Zap} colorClass="bg-yellow-400/20 text-yellow-300" />);
+export const WorkerNode = memo((props: { data: BaseNodeProps['data'] }) => <BaseNode {...props} icon={Cpu} colorClass="bg-red-400/20 text-red-400" />);
 
-export const ClientNode = (props: any) => <BaseNode {...props} icon={MonitorPlay} colorClass="bg-blue-500/20 text-blue-400" />;
-export const LoadBalancerNode = (props: any) => <BaseNode {...props} icon={ArrowLeftRight} colorClass="bg-purple-500/20 text-purple-400" />;
-export const ApiServerNode = (props: any) => <BaseNode {...props} icon={Server} colorClass="bg-emerald-500/20 text-emerald-400" />;
-export const CacheNode = (props: any) => <BaseNode {...props} icon={Layers} colorClass="bg-yellow-500/20 text-yellow-400" />;
-export const DatabaseNode = (props: any) => <BaseNode {...props} icon={Database} colorClass="bg-rose-500/20 text-rose-400" />;
-export const MessageQueueNode = (props: any) => <BaseNode {...props} icon={HardDrive} colorClass="bg-cyan-500/20 text-cyan-400" />;
-export const CdnNode = (props: any) => <BaseNode {...props} icon={Network} colorClass="bg-orange-500/20 text-orange-400" />;
-export const DnsNode = (props: any) => <BaseNode {...props} icon={Globe} colorClass="bg-indigo-500/20 text-indigo-400" />;
-export const ObjectStoreNode = (props: any) => <BaseNode {...props} icon={Package} colorClass="bg-amber-700/20 text-amber-500" />;
-export const ServerlessNode = (props: any) => <BaseNode {...props} icon={Zap} colorClass="bg-yellow-400/20 text-yellow-300" />;
-export const WorkerNode = (props: any) => <BaseNode {...props} icon={Cpu} colorClass="bg-red-400/20 text-red-400" />;
+ClientNode.displayName = 'ClientNode';
+LoadBalancerNode.displayName = 'LoadBalancerNode';
+ApiServerNode.displayName = 'ApiServerNode';
+CacheNode.displayName = 'CacheNode';
+DatabaseNode.displayName = 'DatabaseNode';
+MessageQueueNode.displayName = 'MessageQueueNode';
+CdnNode.displayName = 'CdnNode';
+DnsNode.displayName = 'DnsNode';
+ObjectStoreNode.displayName = 'ObjectStoreNode';
+ServerlessNode.displayName = 'ServerlessNode';
+WorkerNode.displayName = 'WorkerNode';
 
 export const nodeTypes = {
   client: ClientNode,

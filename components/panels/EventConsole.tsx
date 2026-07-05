@@ -1,61 +1,74 @@
 "use client";
 
-import React, { useEffect, useRef } from 'react';
-import { Terminal, AlertTriangle, Info, Zap } from 'lucide-react';
+import React, { useEffect, useRef, useMemo } from 'react';
+import { Terminal, AlertTriangle, Zap } from 'lucide-react';
+
+interface TickData {
+  tick: number;
+  events: string[];
+  nodes: Record<string, unknown>;
+}
 
 interface EventConsoleProps {
-  history: any[];
+  history: TickData[];
+}
+
+interface LogEntry {
+  tick: number;
+  rawMsg: string;
+  recommendation: string;
+  type: string;
+}
+
+function getLogEntry(tick: number, evt: string): LogEntry {
+  let rec = "";
+  let type = "info";
+
+  if (evt.includes("CHAOS DAEMON")) {
+    if (evt.includes("db_") || evt.includes("database") || evt.includes("cassandra")) {
+      rec = "Promote Read Replica to Master or increase DB IOPS.";
+    } else if (evt.includes("cdn_") || evt.includes("dns")) {
+      rec = "Shift edge routing to adjacent geographic POP.";
+    } else if (evt.includes("api_") || evt.includes("svc") || evt.includes("server")) {
+      rec = "Auto-scale API pods or implement aggressive caching.";
+    } else if (evt.includes("mq_") || evt.includes("kafka")) {
+      rec = "Increase topic partitions and scale consumer worker groups.";
+    } else if (evt.includes("work_") || evt.includes("encoder") || evt.includes("flink")) {
+      rec = "Scale Horizontal Pod Autoscaler to process backlog queue.";
+    } else if (evt.includes("alb_") || evt.includes("lb") || evt.includes("gateway")) {
+      rec = "Scale up ingress load balancer capacity matrix.";
+    } else {
+      rec = "Deploy redundant sibling cluster to heal grid.";
+    }
+    type = "chaos";
+  } else if (evt.includes("Capacity exceeded")) {
+    rec = "Scale horizontally or increase processing capacity.";
+    type = "warning";
+  } else if (evt.includes("Injected failure")) {
+    rec = "Ensure external circuit breakers are configured.";
+    type = "error";
+  } else {
+    rec = "Monitor downstream dependencies.";
+  }
+
+  return { tick, rawMsg: evt, recommendation: rec, type };
 }
 
 export default function EventConsole({ history }: EventConsoleProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Extract flattened events from history
-  const logStream: { tick: number, rawMsg: string, recommendation: string, type: string }[] = [];
-  
-  (history || []).forEach(tickObj => {
-    if (tickObj.events && tickObj.events.length > 0) {
-      tickObj.events.forEach((evt: string) => {
-        let rec = "";
-        let type = "info";
-        
-        if (evt.includes("CHAOS DAEMON")) {
-          // Context-aware Chaos Recommendations
-          if (evt.includes("db_") || evt.includes("database") || evt.includes("cassandra")) {
-             rec = "Promote Read Replica to Master or increase DB IOPS.";
-          } else if (evt.includes("cdn_") || evt.includes("dns")) {
-             rec = "Shift edge routing to adjacent geographic POP.";
-          } else if (evt.includes("api_") || evt.includes("svc") || evt.includes("server")) {
-             rec = "Auto-scale API pods or implement aggressive caching.";
-          } else if (evt.includes("mq_") || evt.includes("kafka")) {
-             rec = "Increase topic partitions and scale consumer worker groups.";
-          } else if (evt.includes("work_") || evt.includes("encoder") || evt.includes("flink")) {
-             rec = "Scale Horizontal Pod Autoscaler to process backlog queue.";
-          } else if (evt.includes("alb_") || evt.includes("lb") || evt.includes("gateway")) {
-             rec = "Scale up ingress load balancer capacity matrix.";
-          } else {
-             rec = "Deploy redundant sibling cluster to heal grid.";
-          }
-          type = "chaos";
-        } else if (evt.includes("Capacity exceeded")) {
-          rec = "Scale horizontally or increase processing capacity.";
-          type = "warning";
-        } else if (evt.includes("Injected failure")) {
-          rec = "Ensure external circuit breakers are configured.";
-          type = "error";
-        } else {
-          rec = "Monitor downstream dependencies.";
-        }
-        
-        logStream.push({
-          tick: tickObj.tick,
-          rawMsg: evt,
-          recommendation: rec,
-          type
+  // PERF-6: Memoize log stream computation instead of rebuilding on every render
+  const logStream = useMemo(() => {
+    const logs: LogEntry[] = [];
+    (history || []).forEach(tickObj => {
+      if (tickObj.events && tickObj.events.length > 0) {
+        tickObj.events.forEach((evt: string) => {
+          logs.push(getLogEntry(tickObj.tick, evt));
         });
-      });
-    }
-  });
+      }
+    });
+    return logs;
+  }, [history]);
 
   // Auto-scroll to bottom of logs
   useEffect(() => {
