@@ -1,47 +1,76 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import LabCanvas from "@/components/canvas/LabCanvas";
-import { Play, Settings2, Bug, Save, Trash2, Library, Activity, Download, Upload } from 'lucide-react';
+import { Play, Settings2, Bug, Trash2, Download, Upload, Code, BookOpen, Layers } from 'lucide-react';
 import axios from 'axios';
-import { useStore } from "@/lib/store";
+import { useStore, type NodeData } from "@/lib/store";
 import AnalyticsPanel from "@/components/panels/AnalyticsPanel";
 import CostModal from "@/components/panels/CostModal";
 import EventConsole from "@/components/panels/EventConsole";
+import { WaterfallTracer, type TraceData } from "@/components/telemetry/WaterfallTracer";
+import { LoadProfileEditor, type LoadProfileConfig } from "@/components/telemetry/LoadProfileEditor";
+import BlueprintManager from "@/components/panels/BlueprintManager";
+import PluginEditor from "@/components/panels/PluginEditor";
+import { AuthProvider } from "@/lib/auth";
+import ReplayController from "@/components/telemetry/ReplayController";
+import type { Node } from "@xyflow/react";
+
+// SEC-8: Blueprint validation helper
+function isValidBlueprint(data: unknown): data is { nodes: unknown[]; edges: unknown[] } {
+  if (typeof data !== 'object' || data === null) return false;
+  const obj = data as Record<string, unknown>;
+  if (!Array.isArray(obj.nodes) || !Array.isArray(obj.edges)) return false;
+  for (const node of obj.nodes) {
+    if (typeof node !== 'object' || node === null) return false;
+    const n = node as Record<string, unknown>;
+    if (typeof n.id !== 'string' || typeof n.type !== 'string') return false;
+  }
+  return true;
+}
+
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000';
 
 export default function LabPage() {
-  const { nodes, edges, setNodes, setEdges } = useStore();
-  const [isRunning, setIsRunning] = useState(false);
-  const [timelineData, setTimelineData] = useState<any>(null);
-  const [streamHistory, setStreamHistory] = useState<any[]>([]);
-  const [templates, setTemplates] = useState<any[]>([]);
-  const [failures, setFailures] = useState<any[]>([]);
+  const { 
+    nodes, edges, setNodes, setEdges, 
+    isRunning, setRunning, rawHistory, pushTick, clearTelemetry, applyDelta, unitCosts 
+  } = useStore();
+
+  const [templates, setTemplates] = useState<Record<string, unknown>[]>([]);
+  const [failures, setFailures] = useState<Record<string, unknown>[]>([]);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [isChaosMode, setIsChaosMode] = useState(false);
   const [isCostModalOpen, setIsCostModalOpen] = useState(false);
+  const [latestTrace, setLatestTrace] = useState<TraceData | null>(null);
+  const [loadProfile, setLoadProfile] = useState<LoadProfileConfig | null>(null);
+  
+  // Panel toggles
+  const [showBlueprintPanel, setShowBlueprintPanel] = useState(false);
+  const [showPluginEditor, setShowPluginEditor] = useState(false);
+  const [showTracePanel, setShowTracePanel] = useState(false);
 
-  // Gamified AWS Cost Engine Component
+  // AWS Cost Engine Component
   const calculateCost = () => {
-    const { unitCosts } = useStore.getState();
     let total = 0;
     nodes.forEach(n => {
       if (n.type === 'client') return;
-      const baseCost = unitCosts[n.type] || 10;
-      // @ts-ignore
+      const baseCost = unitCosts[n.type ?? 'api_server'] || 10;
       const cap = Number(n.data.capacity) || Number(n.data.write_capacity) || 1000;
-      total += baseCost * (cap / 1000); // Scaling cost linearly per 1k RPS
+      total += baseCost * (cap / 1000);
     });
     return total;
   };
 
-  const showToast = (msg: string) => {
+  const showToast = useCallback((msg: string) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(null), 4000);
-  };
+  }, []);
 
   // Fetch templates from backend on load
   useEffect(() => {
-    axios.get('http://localhost:8000/templates')
+    axios.get(`${BACKEND_URL}/templates`)
       .then(res => setTemplates(res.data))
       .catch(console.error);
   }, []);
@@ -51,20 +80,24 @@ export default function LabPage() {
 
   // Load Template Logic
   const loadTemplate = (templateId: string) => {
-    const tmpl = templates.find(t => t.id === templateId);
+    const tmpl = templates.find((t: Record<string, unknown>) => t.id === templateId);
     if (!tmpl) return;
     
-    const newNodes = Object.keys(tmpl.graph.nodes).map(nodeId => {
-      const ndata = tmpl.graph.nodes[nodeId];
+    const graph = tmpl.graph as Record<string, Record<string, unknown>>;
+    const graphNodes = graph.nodes as Record<string, Record<string, unknown>>;
+    const newNodes = Object.keys(graphNodes).map(nodeId => {
+      const ndata = graphNodes[nodeId];
+      if (!ndata) return null;
       return {
         id: nodeId,
-        type: ndata.type,
-        position: ndata.position || { x: 100, y: 100 },
-        data: { ...ndata }
-      };
-    });
+        type: (ndata.type as string) ?? 'api_server',
+        position: (ndata.position as { x: number; y: number }) || { x: 100, y: 100 },
+        data: { ...ndata } as NodeData
+      } as Node<NodeData>;
+    }).filter((n): n is NonNullable<typeof n> => n !== null);
     
-    const newEdges = tmpl.graph.edges.map((e: any, i: number) => ({
+    const graphEdges = (graph.edges as unknown) as Array<{ source: string; target: string }>;
+    const newEdges = graphEdges.map((e, i: number) => ({
       id: `e_${i}`,
       source: e.source,
       target: e.target,
@@ -74,12 +107,11 @@ export default function LabPage() {
 
     setNodes(newNodes);
     setEdges(newEdges);
-    setTimelineData(null);
     setFailures([]);
   };
 
   // Property Updater
-  const updateSelectedNode = (key: string, value: any) => {
+  const updateSelectedNode = (key: string, value: unknown) => {
     if (!selectedNode) return;
     setNodes(nodes.map(n => {
       if (n.id === selectedNode.id) {
@@ -107,12 +139,11 @@ export default function LabPage() {
         drop_rate: 0
       }
     })));
-    setTimelineData(null);
     setFailures([]);
+    clearTelemetry();
     showToast("Traffic data reset! Topologies preserved.");
   };
 
-  // Trigger explicit failure injections mapping to node_ids
   const injectFailure = (type: string) => {
     if (type === "db_crash") {
       const dbNode = nodes.find(n => n.type === 'database');
@@ -150,12 +181,14 @@ export default function LabPage() {
       reader.onload = (evt) => {
         try {
           const data = JSON.parse(evt.target?.result as string);
-          if (data.nodes && data.edges) {
-            setNodes(data.nodes);
-            setEdges(data.edges);
+          if (isValidBlueprint(data)) {
+            setNodes(data.nodes as typeof nodes);
+            setEdges(data.edges as typeof edges);
             showToast("Blueprint Imported!");
+          } else {
+            showToast("Error: Blueprint schema validation failed. Missing required fields.");
           }
-        } catch (err) {
+        } catch {
           showToast("Error: Invalid Blueprint JSON file");
         }
       };
@@ -164,80 +197,78 @@ export default function LabPage() {
   };
 
   const handleRunSimulation = async () => {
-    setIsRunning(true);
-    setTimelineData(null); // Clear previous analysis
-    setStreamHistory([]); // Clear graph
+    setRunning(true);
+    clearTelemetry();
+
     try {
       const graph = {
         nodes: nodes.reduce((acc, n) => ({ ...acc, [n.id]: n.data }), {}),
         edges: edges.map(e => ({ source: e.source, target: e.target }))
       };
       
-      const ws = new WebSocket('ws://localhost:8000/ws/simulate');
-      const localHistory: any[] = [];
+      const ws = new WebSocket(`${WS_URL}/ws/simulate`);
       
       ws.onopen = () => {
         ws.send(JSON.stringify({
           graph,
-          duration_ticks: 60,
+          duration_ticks: loadProfile?.params?.ramp_ticks || 60,
           failures_injected: failures,
-          chaos_mode: isChaosMode
+          chaos_mode: isChaosMode,
+          seed: 0,
+          ...(loadProfile && { load_profile: loadProfile }),
         }));
       };
 
       ws.onmessage = (event) => {
         const tickData = JSON.parse(event.data);
-        localHistory.push(tickData);
-        setStreamHistory([...localHistory]);
+        pushTick(tickData);
+
+        if (tickData.trace) {
+          setLatestTrace(tickData.trace as TraceData);
+          setShowTracePanel(true);
+        }
         
-        // Visually render the tick!
-        setNodes(currentNodes => currentNodes.map(n => {
-          const liveProps = tickData.nodes[n.id];
-          if (liveProps) {
-            return { ...n, data: { ...n.data, ...liveProps } };
-          }
-          return n;
-        }));
+        if (tickData.nodes) {
+          applyDelta(tickData.nodes);
+        }
       };
 
       ws.onclose = async () => {
-        // Stream finished! Get Analysis!
+        setRunning(false);
+        const currentHistory = useStore.getState().rawHistory;
+        
         try {
-          const analyzeRes = await axios.post('http://localhost:8000/analyze', {
-            history: localHistory,
+          const analyzeRes = await axios.post(`${BACKEND_URL}/analyze`, {
+            history: currentHistory,
             graph
           });
-          
-          setTimelineData({
-            history: localHistory,
-            explanation: analyzeRes.data
-          });
-        } catch (err) {
-          console.error("Analysis Failed", err);
-          showToast("Analysis Engine unreachable.");
+          if (analyzeRes.data?.narrative) {
+            showToast(analyzeRes.data.narrative);
+          }
+        } catch {
+          // Analysis is non-blocking
         }
         
-        // Cleanup
         setTimeout(() => {
-          setIsRunning(false);
           setFailures([]); 
         }, 1000);
       };
 
       ws.onerror = (error) => {
         console.error("WebSocket Error:", error);
-        setIsRunning(false);
+        setRunning(false);
         showToast("Simulation connection failed.");
       };
       
     } catch (e) {
       console.error(e);
       showToast("Simulation Initialization Failed.");
-      setIsRunning(false);
+      setRunning(false);
     }
   };
 
   return (
+    <AuthProvider>
     <div className="flex h-screen w-screen flex-col bg-black text-gray-100 overflow-hidden font-sans dark relative">
       
       {/* Toast Notification */}
@@ -253,7 +284,7 @@ export default function LabPage() {
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-3">
             <div className="h-6 w-6 rounded-md border border-purple-500/50 bg-gradient-to-tr from-purple-600/80 to-blue-500/80 shadow-[0_0_10px_rgba(147,51,234,0.3)]"></div>
-            <h1 className="text-sm font-semibold tracking-wide text-gray-100">SIM LAB <span className="font-light text-gray-500">v0.1.0</span></h1>
+            <h1 className="text-sm font-semibold tracking-wide text-gray-100">SIM LAB <span className="font-light text-gray-500">v0.3.0</span></h1>
           </div>
           
           <button 
@@ -286,7 +317,7 @@ export default function LabPage() {
             >
               <option value="" disabled>Load Blueprint...</option>
               {templates.map(t => (
-                <option key={t.id} value={t.id}>{t.name}</option>
+                <option key={t.id as string} value={t.id as string}>{t.name as string}</option>
               ))}
             </select>
           )}
@@ -306,6 +337,28 @@ export default function LabPage() {
               <Upload size={14} />
               <input type="file" accept=".json" className="hidden" onChange={importBlueprint} />
             </label>
+            <div className="w-[1px] h-4 bg-white/10" />
+            <button 
+              onClick={() => setShowBlueprintPanel(!showBlueprintPanel)}
+              title="Blueprint Manager"
+              className={`p-1.5 rounded transition-colors ${showBlueprintPanel ? 'bg-blue-500/20 text-blue-400' : 'text-gray-400 hover:bg-white/10 hover:text-blue-400'}`}
+            >
+              <Layers size={14} />
+            </button>
+            <button 
+              onClick={() => setShowPluginEditor(!showPluginEditor)}
+              title="Plugin Editor"
+              className={`p-1.5 rounded transition-colors ${showPluginEditor ? 'bg-purple-500/20 text-purple-400' : 'text-gray-400 hover:bg-white/10 hover:text-purple-400'}`}
+            >
+              <Code size={14} />
+            </button>
+            <button 
+              onClick={() => setShowTracePanel(!showTracePanel)}
+              title="Request Trace"
+              className={`p-1.5 rounded transition-colors ${showTracePanel ? 'bg-amber-500/20 text-amber-400' : 'text-gray-400 hover:bg-white/10 hover:text-amber-400'}`}
+            >
+              <BookOpen size={14} />
+            </button>
           </div>
 
           <div className="h-4 w-[1px] bg-white/10"></div>
@@ -345,11 +398,72 @@ export default function LabPage() {
             <div draggable onDragStart={(e) => e.dataTransfer.setData('app/reactflow', JSON.stringify({ type: 'object_store', label: 'Object Store' }))} className="rounded-lg border border-white/5 bg-white/5 p-2 hover:bg-white/10 cursor-grab active:cursor-grabbing transition-colors text-sm font-medium">Object Store</div>
             <div draggable onDragStart={(e) => e.dataTransfer.setData('app/reactflow', JSON.stringify({ type: 'message_queue', label: 'Message Queue' }))} className="rounded-lg border border-white/5 bg-white/5 p-2 hover:bg-white/10 cursor-grab active:cursor-grabbing transition-colors text-sm font-medium">Message Queue</div>
           </div>
+
+          {/* Load Profile Configuration */}
+          <div className="mt-4 border-t border-white/10 pt-4">
+            <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-500 mb-2">Load Profile</h2>
+            <LoadProfileEditor 
+              duration={loadProfile?.params?.ramp_ticks || 60} 
+              onApply={(config) => setLoadProfile(config)} 
+            />
+          </div>
         </aside>
 
-        {/* Center Canvas */}
-        <main className="relative flex-1 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-gray-900/40 via-black to-black">
-          <LabCanvas />
+        {/* Center Canvas + Replay */}
+        <main className="relative flex-1 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-gray-900/40 via-black to-black flex flex-col">
+          <div className="flex-1 relative">
+            <LabCanvas />
+          </div>
+          
+          {/* Sub-tick replay controller — appears after simulation completes */}
+          <ReplayController 
+            history={rawHistory}
+            isSimComplete={!isRunning && rawHistory.length > 0}
+            onInterpolatedTick={(interpolated) => {
+              if (interpolated.nodes) {
+                applyDelta(
+                  interpolated.nodes as Record<string, Record<string, unknown>>
+                );
+              }
+            }}
+          />
+
+          {/* Overlay panels */}
+          {showBlueprintPanel && (
+            <div className="absolute inset-y-0 left-0 w-80 z-20 border-r border-white/10 bg-black/95 backdrop-blur-md overflow-y-auto shadow-2xl">
+              <div className="flex items-center justify-between p-3 border-b border-white/10">
+                <h3 className="text-xs font-semibold uppercase tracking-widest text-blue-400">Blueprint Manager</h3>
+                <button onClick={() => setShowBlueprintPanel(false)} className="text-gray-500 hover:text-white text-xs">✕</button>
+              </div>
+              <div className="p-3">
+                <BlueprintManager />
+              </div>
+            </div>
+          )}
+
+          {showPluginEditor && (
+            <div className="absolute inset-y-0 left-0 w-96 z-20 border-r border-white/10 bg-black/95 backdrop-blur-md overflow-y-auto shadow-2xl">
+              <div className="flex items-center justify-between p-3 border-b border-white/10">
+                <h3 className="text-xs font-semibold uppercase tracking-widest text-purple-400">Plugin Editor</h3>
+                <button onClick={() => setShowPluginEditor(false)} className="text-gray-500 hover:text-white text-xs">✕</button>
+              </div>
+              <div className="p-3">
+                <PluginEditor />
+              </div>
+            </div>
+          )}
+
+          {showTracePanel && latestTrace && (
+            <div className="absolute inset-y-0 right-0 w-96 z-20 border-l border-white/10 bg-black/95 backdrop-blur-md overflow-y-auto shadow-2xl">
+              <div className="flex items-center justify-between p-3 border-b border-white/10">
+                <h3 className="text-xs font-semibold uppercase tracking-widest text-amber-400">Request Trace</h3>
+                <button onClick={() => setShowTracePanel(false)} className="text-gray-500 hover:text-white text-xs">✕</button>
+              </div>
+              <div className="p-3">
+                <WaterfallTracer trace={latestTrace} />
+              </div>
+            </div>
+          )}
         </main>
 
         {/* Right Sidebar (Properties & Failures) */}
@@ -473,13 +587,13 @@ export default function LabPage() {
           </button>
 
           {/* Real-time Console */}
-          <EventConsole history={streamHistory} />
+          <EventConsole history={rawHistory as unknown as { tick: number; events: string[]; nodes: Record<string, unknown> }[]} />
 
         </aside>
       </div>
       
       {/* Analytics Panel Bottom Rack */}
-      <AnalyticsPanel history={streamHistory} />
+      <AnalyticsPanel />
 
       {/* Popups */}
       {isCostModalOpen && (
@@ -487,5 +601,6 @@ export default function LabPage() {
       )}
 
     </div>
+    </AuthProvider>
   );
 }
