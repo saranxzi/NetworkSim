@@ -1,0 +1,36 @@
+# Git
+.git
+.git_old
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+venv/
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+.next/
+
+# IDE
+.vscode/
+.idea/
+
+# Build artifacts
+out/
+build/
+
+# Docs
+University_Submissions/
+*.md
+!README.md
+
+# Misc
+.DS_Store
+*.pem
+.env*
