@@ -1,0 +1,108 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install engine library
+        run: pip install -e "./networksim_core[test]"
+
+      - name: Install backend deps
+        run: pip install -r backend/requirements.txt
+
+      - name: Run engine tests
+        run: python -m pytest networksim_core/tests/ -v --tb=short
+
+      - name: Check backend imports
+        run: python -c "from app.main import app; print(f'{len(app.routes)} routes OK')"
+        working-directory: backend
+
+  cli:
+    name: CLI E2E
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install engine + CLI
+        run: |
+          pip install -e "./networksim_core[all]"
+          pip install -e "./cli"
+
+      - name: Run SLA check (should pass)
+        run: networksim examples/blueprints/ecommerce.json -i examples/rules/sla_check.yaml
+
+      - name: Run overloaded check (should fail)
+        run: |
+          networksim examples/blueprints/overloaded.json -i examples/rules/sla_check.yaml || EXIT_CODE=$?
+          if [ "${EXIT_CODE:-0}" -ne 1 ]; then
+            echo "Expected exit code 1, got ${EXIT_CODE:-0}"
+            exit 1
+          fi
+          echo "Correctly detected violations (exit 1)"
+
+  frontend:
+    name: Frontend Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build
+
+  docker:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build containers
+        run: docker compose build
+
+      - name: Start services
+        run: docker compose up -d
+
+      - name: Wait for healthy
+        run: sleep 10
+
+      - name: Health check backend
+        run: curl -f http://localhost:8000/ || exit 1
+
+      - name: Cleanup
+        run: docker compose down -v
