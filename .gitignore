@@ -30,19 +30,35 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# env files — block real secrets but allow templates
+.env
+.env.local
+.env.*.local
+!.env.example
+!.env.template
 
 # vercel
 .vercel
 
 # typescript
 *.tsbuildinfo
-next-env.d.ts
 
 # Python
 backend/venv/
+backend/.venv/
 __pycache__/
 *.pyc
 *.pyo
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# IDE
+.vscode/
+.idea/
+
+# SQLite dev databases
+*.db
+
+# Python virtual environment
+.venv/
