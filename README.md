@@ -1,42 +1,70 @@
-# NetworkSim (formerly FlightSim)
+# NetworkSim
 
-NetworkSim is a high-fidelity, real-time web application designed to simulate the physics, traffic flow, and failure states of massive distributed network architectures. It provides a visual, interactive canvas where users can build, monitor, and deliberately test complex microservice environments under simulated duress.
+A real-time distributed systems simulator with an interactive topology canvas. Build network architectures, inject failures, and observe traffic flow, queuing, and cost behavior under load.
 
-## Features & Recent Updates
+## Quick Start
 
-*   **Interactive Architecture Canvas:** A drag-and-drop React Flow interface for building custom network topologies.
-*   **Real-Time Physics Engine:** A Python-based (NetworkX) high-speed simulator calculating latency, bandwidth bottlenecks, and edge costs at 60 ticks per second.
-*   **System Latency Tracking:** End-to-end system latency monitoring via deep instrumentation of both frontend and backend for real-world performance verification.
-*   **Chaos Daemon:** An automated sub-system that selectively degrades or destroys nodes to test system resilience and routing intelligence.
-*   **Live Telemetry & Gamified Billing:** Recharts-powered analytics for real-time monitoring of theoretical resource consumption and a dynamic, editable AWS costs tracking matrix.
-*   **NLP Auto-Fix Terminal:** A natural language processing terminal console to diagnose and automatically repair degraded network architecture.
+### Prerequisites
 
-## Getting Started
+- Node.js 20+
+- Python 3.12+
 
-### Local Development
+### Frontend
 
-This project utilizes Next.js 16 (on Turbopack) for the frontend and a Python-based FastAPI simulator for the physics backend.
-
-#### Frontend
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
 ```
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the visual environment.
 
-#### Backend
+Open http://localhost:3000
+
+### Backend
+
 ```bash
-cd backend
-python -m venv venv
-source venv/bin/activate  # On Windows use `venv\Scripts\activate`
-pip install -r requirements.txt
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+python -m venv .venv
+.venv\Scripts\activate     # Windows
+# source .venv/bin/activate  # Linux/macOS
+
+pip install -e ./networksim_core
+pip install -r backend/requirements.txt
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --app-dir backend
+```
+
+### Docker
+
+```bash
+cp .env.example .env       # edit credentials before production use
+docker compose up
+```
+
+## Running Tests
+
+```bash
+# engine unit tests
+python -m pytest networksim_core/tests/ -v
+
+# frontend lint + typecheck
+npm run lint
+npm run type-check
+
+# CLI invariant check
+pip install -e ./cli
+networksim examples/blueprints/ecommerce.json -i examples/rules/sla_check.yaml
 ```
 
 ## Architecture
-- **Frontend Layer:** Next.js, React Flow, Zustand, Recharts, Tailwind CSS.
-- **Simulation Layer:** FastAPI, NetworkX (Python DiGraph), Async Generators for 60-tick WebSocket payloads, Redis.
 
-## Deployment
-Docker support is baked in, allowing both backend and frontend layers to spin up reliably. Check `docker-compose.yml` for network settings.
+See [docs/architecture.md](docs/architecture.md) for the system diagram.
+
+- **Frontend**: Next.js 16 / React Flow / Zustand / Recharts / Tailwind CSS
+- **Backend**: FastAPI / SQLAlchemy (async) / Redis / WebSocket streaming
+- **Engine**: `networksim_core` -- python-igraph, M/M/c/K queuing model, seedable chaos injection
+- **CLI**: standalone invariant checker with JUnit XML and Markdown output
+
+## Configuration
+
+Copy `.env.example` to `.env`. All configuration is via environment variables -- see the template for available options.
+
+## License
+
+Proprietary.
