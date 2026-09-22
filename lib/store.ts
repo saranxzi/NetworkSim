@@ -214,11 +214,3 @@ export const useStore = create<StoreState>((set, get) => ({
   addViolation: (v) => set((state) => ({ violations: [...state.violations, v] })),
   clearViolations: () => set({ violations: [] })
 }));
-
-// Compatibility aliases
-export const useCanvasStore = useStore;
-export const useTelemetryStore = useStore;
-export const usePluginStore = useStore;
-export const useInvariantStore = useStore;
-export type CanvasStore = StoreState;
-export type TelemetryStore = StoreState;

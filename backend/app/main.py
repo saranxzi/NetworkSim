@@ -1,10 +1,10 @@
 """NetworkSim API — FastAPI application with lifecycle management."""
 
 import logging
+import os
 from contextlib import asynccontextmanager
-from typing import List
 
-from fastapi import FastAPI, HTTPException, WebSocket, Depends
+from fastapi import FastAPI, HTTPException, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -12,7 +12,6 @@ from app.models import SimulationRequest, SimulationResponse, ExplanationOutput,
 from networksim import run_simulation
 from app.simulation.analyzer import analyze_simulation
 from app.templates import get_templates
-from app.deps import get_current_user, get_optional_user, CurrentUser
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +43,6 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Distributed Systems Lab API", lifespan=lifespan)
 
 # Restrict CORS origins to known frontends
-import os
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 app.add_middleware(
     CORSMiddleware,
@@ -89,7 +87,7 @@ def simulate(req: SimulationRequest):
 
 
 class AnalyzeRequest(BaseModel):
-    history: List[SimulationTickResult]
+    history: list[SimulationTickResult]
     graph: CanvasGraph
 
 @app.post("/analyze", response_model=ExplanationOutput)

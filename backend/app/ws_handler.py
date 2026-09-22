@@ -10,7 +10,6 @@ Manages the lifecycle of a streaming simulation session:
 
 import asyncio
 import logging
-from typing import Dict, List, Any
 
 from fastapi import WebSocket, WebSocketDisconnect
 

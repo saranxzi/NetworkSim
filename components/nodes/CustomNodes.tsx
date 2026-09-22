@@ -1,13 +1,8 @@
 "use client"
 import React, { memo } from 'react';
 import { Handle, Position } from '@xyflow/react';
-import { clsx, type ClassValue } from 'clsx';
-import { twMerge } from 'tailwind-merge';
 import { MonitorPlay, Server, Database, Layers, ArrowLeftRight, HardDrive, Globe, Network, Package, Zap, Cpu, type LucideIcon } from 'lucide-react';
 
-function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
 
 interface BaseNodeProps {
   data: {
@@ -44,17 +39,13 @@ export const BaseNode = memo(function BaseNode({ data, icon: Icon, colorClass }:
   }
 
   return (
-    <div className={cn(
-      "relative flex w-48 flex-col rounded-xl border bg-black/60 p-3 text-white backdrop-blur-md transition-all duration-300",
-      healthBorder, 
-      healthGlow
-    )}>
+    <div className={`relative flex w-48 flex-col rounded-xl border bg-black/60 p-3 text-white backdrop-blur-md transition-all duration-300 ${healthBorder} ${healthGlow}`}>
       {data.type !== "client" && (
         <Handle type="target" position={Position.Left} className="w-3 h-3 bg-gray-400 border-2 border-black" />
       )}
       
       <div className="flex items-center gap-3 border-b border-white/10 pb-2">
-        <div className={cn("p-1.5 rounded-lg", colorClass)}>
+        <div className={`p-1.5 rounded-lg ${colorClass}`}>
           <Icon size={16} />
         </div>
         <div className="flex-1 overflow-hidden">
@@ -83,10 +74,7 @@ export const BaseNode = memo(function BaseNode({ data, icon: Icon, colorClass }:
       {data.type !== "client" && (data.capacity || data.write_capacity) && (
         <div className="mt-3 relative h-1 w-full overflow-hidden rounded-full bg-white/10">
           <div 
-            className={cn(
-              "absolute inset-y-0 left-0 transition-all duration-500",
-              data.status === "critical" ? "bg-red-500" : data.status === "warning" ? "bg-amber-500" : "bg-emerald-500"
-            )}
+            className={`absolute inset-y-0 left-0 transition-all duration-500 ${data.status === "critical" ? "bg-red-500" : data.status === "warning" ? "bg-amber-500" : "bg-emerald-500"}`}
             style={{ 
               width: `${Math.min(100, Math.max(0, ((data.throughput || 0) / (data.capacity || data.write_capacity || 1)) * 100))}%` 
             }}

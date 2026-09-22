@@ -1,6 +1,5 @@
 import os
 import logging
-from typing import Optional
 from collections import OrderedDict
 
 logger = logging.getLogger(__name__)
@@ -60,7 +59,7 @@ async def check_rate_limit(tenant_id: str, limit_per_minute: int = 60) -> bool:
 _MEMORY_CACHE_MAX_SIZE = 10_000
 _memory_cache: OrderedDict = OrderedDict()
 
-async def cache_get(key: str) -> Optional[str]:
+async def cache_get(key: str) -> str | None:
     if _redis_available:
         try:
             return await _redis_client.get(key)

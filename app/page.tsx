@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from "react";
 import LabCanvas from "@/components/canvas/LabCanvas";
 import { Play, Settings2, Bug, Trash2, Download, Upload, Code, BookOpen, Layers } from 'lucide-react';
-import axios from 'axios';
 import { useStore, type NodeData } from "@/lib/store";
 import AnalyticsPanel from "@/components/panels/AnalyticsPanel";
 import CostModal from "@/components/panels/CostModal";
@@ -70,8 +69,9 @@ export default function LabPage() {
 
   // Fetch templates from backend on load
   useEffect(() => {
-    axios.get(`${BACKEND_URL}/templates`)
-      .then(res => setTemplates(res.data))
+    fetch(`${BACKEND_URL}/templates`)
+      .then(res => res.json())
+      .then(data => setTemplates(data))
       .catch(console.error);
   }, []);
 
@@ -238,12 +238,14 @@ export default function LabPage() {
         const currentHistory = useStore.getState().rawHistory;
         
         try {
-          const analyzeRes = await axios.post(`${BACKEND_URL}/analyze`, {
-            history: currentHistory,
-            graph
+          const analyzeRes = await fetch(`${BACKEND_URL}/analyze`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ history: currentHistory, graph })
           });
-          if (analyzeRes.data?.narrative) {
-            showToast(analyzeRes.data.narrative);
+          const data = await analyzeRes.json();
+          if (data?.narrative) {
+            showToast(data.narrative);
           }
         } catch {
           // Analysis is non-blocking
