@@ -12,18 +12,18 @@ router = APIRouter()
 
 class BlueprintCreate(BaseModel):
     name: str
-    description: Optional[str] = None
+    description: str | None = None
 
 class BlueprintVersionCreate(BaseModel):
     graph_schema: dict
-    invariants: Optional[dict] = None
+    invariants: dict | None = None
 
 class BlueprintVersionResponse(BaseModel):
     id: str
     blueprint_id: str
     version_number: int
     graph_schema: dict
-    invariants: Optional[dict]
+    invariants: dict | None = None
     created_at: datetime
     
     model_config = ConfigDict(from_attributes=True)
@@ -32,14 +32,14 @@ class BlueprintResponse(BaseModel):
     id: str
     workspace_id: str
     name: str
-    description: Optional[str]
+    description: str | None = None
     created_at: datetime
     updated_at: datetime
     
     model_config = ConfigDict(from_attributes=True)
 
 class BlueprintWithLatestVersion(BlueprintResponse):
-    latest_version: Optional[BlueprintVersionResponse] = None
+    latest_version: BlueprintVersionResponse | None = None
 
 async def _get_default_workspace(db: AsyncSession, user: CurrentUser) -> str:
     stmt = select(Workspace).where(Workspace.owner_id == user.id)
@@ -78,7 +78,7 @@ async def create_blueprint(
     await db.flush()
     return blueprint
 
-@router.get("", response_model=List[BlueprintResponse])
+@router.get("", response_model=list[BlueprintResponse])
 async def list_blueprints(
     db: AsyncSession = Depends(get_db),
     user: CurrentUser = Depends(get_current_user)
@@ -141,7 +141,7 @@ async def save_version(
     await db.flush()
     return new_ver
 
-@router.get("/{id}/versions", response_model=List[BlueprintVersionResponse])
+@router.get("/{id}/versions", response_model=list[BlueprintVersionResponse])
 async def list_versions(
     id: str,
     db: AsyncSession = Depends(get_db),

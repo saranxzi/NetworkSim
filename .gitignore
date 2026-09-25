@@ -62,3 +62,5 @@ __pycache__/
 
 # Python virtual environment
 .venv/
+
+graphify-out/

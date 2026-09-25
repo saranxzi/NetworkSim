@@ -1,9 +1,9 @@
 """Invariant rule checker with pre-compiled expressions."""
 import ast
-import simpleeval
-from typing import Dict, List
 from dataclasses import dataclass
 from networksim.invariants.loader import InvariantRule
+
+_NO_BUILTINS = {"__builtins__": {}}
 
 @dataclass(slots=True)
 class Violation:
@@ -12,17 +12,16 @@ class Violation:
     target: str
     severity: str
     expression: str
-    actual_values: Dict[str, object]
+    actual_values: dict[str, object]
 
 class InvariantChecker:
-    __slots__ = ['rules', 'violations', '_evaluator', '_compiled_rules']
+    __slots__ = ['rules', 'violations', '_compiled_rules']
 
-    def __init__(self, rules: List[InvariantRule]):
+    def __init__(self, rules: list[InvariantRule]):
         self.rules = rules
-        self.violations: List[Violation] = []
-        self._evaluator = simpleeval.SimpleEval()
+        self.violations: list[Violation] = []
         # Pre-compile all rule expressions at init time
-        self._compiled_rules: Dict[str, ast.Expression] = {}
+        self._compiled_rules: dict[str, ast.Expression] = {}
         for rule in rules:
             try:
                 parsed = ast.parse(rule.rule, mode='eval')
@@ -34,12 +33,12 @@ class InvariantChecker:
                     f"Invalid expression in rule '{rule.name}': {rule.rule} — {e}"
                 ) from e
 
-    def evaluate_tick(self, tick: int, nodes: Dict[str, dict]) -> List[Violation]:
+    def evaluate_tick(self, tick: int, nodes: dict[str, dict]) -> list[Violation]:
         tick_violations = []
         for rule in self.rules:
             compiled = self._compiled_rules.get(rule.name)
             if compiled is None:
-                continue  # Skip rules that failed to compile (shouldn't happen)
+                continue
             targets = self._resolve_targets(rule.target, nodes)
             for node_id, node_data in targets:
                 context = {
@@ -50,9 +49,8 @@ class InvariantChecker:
                     'status': node_data.get('status', 'healthy'),
                     'capacity': node_data.get('capacity', 0),
                 }
-                self._evaluator.names = context
                 try:
-                    result = eval(compiled, {"__builtins__": {}}, context)
+                    result = eval(compiled, _NO_BUILTINS, context)
                     if not result:
                         v = Violation(
                             tick=tick,
@@ -65,7 +63,6 @@ class InvariantChecker:
                         tick_violations.append(v)
                         self.violations.append(v)
                 except Exception as e:
-                    # Evaluation errors are violations — don't silently swallow
                     v = Violation(
                         tick=tick,
                         rule_name=rule.name,
@@ -78,7 +75,7 @@ class InvariantChecker:
                     self.violations.append(v)
         return tick_violations
 
-    def _resolve_targets(self, target: str, nodes: Dict[str, dict]):
+    def _resolve_targets(self, target: str, nodes: dict[str, dict]):
         if target == '*':
             return list(nodes.items())
         elif target in nodes:

@@ -55,7 +55,18 @@ class TraceGenerator:
             total_duration_ms=total_duration
         )
     
-    def _build_span_tree(self, node_id: str, node_data: dict, adj: Dict[str, List[str]], all_nodes: Dict[str, dict], parent_id: Optional[str]) -> Span:
+    def _build_span_tree(
+        self,
+        node_id: str,
+        node_data: dict,
+        adj: dict[str, list[str]],
+        all_nodes: dict[str, dict],
+        parent_id: str | None,
+        visited: set[str] | None = None
+    ) -> Span:
+        if visited is None:
+            visited = set()
+        current_visited = visited | {node_id}
         span_id = uuid.uuid4().hex[:16]
         latency = node_data.get('latency', 0)
         status_val = node_data.get('status', 'healthy')
@@ -76,11 +87,13 @@ class TraceGenerator:
             }
         )
         
-        # Recurse into children
+        # Recurse into children (with cycle protection)
         children = adj.get(node_id, [])
         for child_id in children:
+            if child_id in current_visited:
+                continue
             child_data = all_nodes.get(child_id, {})
-            child_span = self._build_span_tree(child_id, child_data, adj, all_nodes, span_id)
+            child_span = self._build_span_tree(child_id, child_data, adj, all_nodes, span_id, current_visited)
             span.children.append(child_span)
         
         return span

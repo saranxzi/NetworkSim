@@ -1,9 +1,9 @@
-from typing import List
+from collections import defaultdict
 from networksim.invariants.checker import Violation
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 
-def generate_junit_xml(violations: List[Violation], scenario_name: str, total_ticks: int, duration_seconds: float) -> str:
+def generate_junit_xml(violations: list[Violation], scenario_name: str, total_ticks: int, duration_seconds: float) -> str:
     """Generate JUnit XML format for CI/CD systems (GitHub Actions, Jenkins, GitLab CI)."""
     testsuite = ET.Element('testsuite')
     testsuite.set('name', scenario_name)
@@ -12,37 +12,39 @@ def generate_junit_xml(violations: List[Violation], scenario_name: str, total_ti
     testsuite.set('time', f'{duration_seconds:.3f}')
     testsuite.set('timestamp', datetime.now(timezone.utc).isoformat())
     
-    # Group violations by rule name
-    rules_seen = set()
     if not violations:
         tc = ET.SubElement(testsuite, 'testcase')
         tc.set('name', f'{scenario_name} - All Invariants')
         tc.set('classname', 'networksim.invariants')
         tc.set('time', f'{duration_seconds:.3f}')
     else:
+        # Group violations by rule in a single O(M) pass
+        by_rule: dict[str, list[Violation]] = defaultdict(list)
         for v in violations:
-            if v.rule_name not in rules_seen:
-                rules_seen.add(v.rule_name)
-                tc = ET.SubElement(testsuite, 'testcase')
-                tc.set('name', v.rule_name)
-                tc.set('classname', 'networksim.invariants')
-                
-                same_rule = [x for x in violations if x.rule_name == v.rule_name]
-                failure = ET.SubElement(tc, 'failure')
-                failure.set('type', v.severity)
-                failure.set('message', f'Invariant violated at {len(same_rule)} tick(s)')
-                
-                details = []
-                for sv in same_rule[:5]:  # Show first 5
-                    details.append(f'  Tick {sv.tick}: {sv.target} - {sv.expression} (actual: {sv.actual_values})')
-                if len(same_rule) > 5:
-                    details.append(f'  ... and {len(same_rule) - 5} more violations')
-                failure.text = '\n'.join(details)
+            by_rule[v.rule_name].append(v)
+
+        for rule_name, rule_violations in by_rule.items():
+            first_v = rule_violations[0]
+            tc = ET.SubElement(testsuite, 'testcase')
+            tc.set('name', rule_name)
+            tc.set('classname', 'networksim.invariants')
+            
+            failure = ET.SubElement(tc, 'failure')
+            failure.set('type', first_v.severity)
+            failure.set('message', f'Invariant violated at {len(rule_violations)} tick(s)')
+            
+            details = [
+                f'  Tick {sv.tick}: {sv.target} - {sv.expression} (actual: {sv.actual_values})'
+                for sv in rule_violations[:5]
+            ]
+            if len(rule_violations) > 5:
+                details.append(f'  ... and {len(rule_violations) - 5} more violations')
+            failure.text = '\n'.join(details)
     
     return ET.tostring(testsuite, encoding='unicode', xml_declaration=True)
 
 
-def generate_markdown_report(violations: List[Violation], scenario_name: str, total_ticks: int, duration_seconds: float) -> str:
+def generate_markdown_report(violations: list[Violation], scenario_name: str, total_ticks: int, duration_seconds: float) -> str:
     """Generate a Markdown summary report suitable for PR comments."""
     lines = []
     passed = len(violations) == 0

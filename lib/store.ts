@@ -1,45 +1,30 @@
 import { create } from 'zustand';
-import {
-  Edge,
-  Node,
-  EdgeChange,
-  NodeChange,
-  applyNodeChanges,
-  applyEdgeChanges,
-} from '@xyflow/react';
+import { Node, Edge, NodeChange, EdgeChange, applyNodeChanges, applyEdgeChanges } from '@xyflow/react';
 
 export interface NodeData {
   label: string;
   type: string;
-  status?: string;
+  status: 'healthy' | 'warning' | 'critical' | 'failed';
   throughput?: number;
   latency?: number;
   queue_depth?: number;
   drop_rate?: number;
   capacity?: number;
   write_capacity?: number;
-  base_rps?: number;
   base_latency?: number;
+  base_rps?: number;
   burst_factor?: number;
   [key: string]: unknown;
 }
 
 export interface TelemetryTick {
   tick: number;
-  events: string[];
+  timestamp: number;
   totalThroughput: number;
   totalQueue: number;
   totalDropped: number;
   nodes?: Record<string, Record<string, unknown>>;
   raw?: Record<string, unknown>;
-}
-
-export interface InvariantViolation {
-  tick: number;
-  ruleName: string;
-  target: string;
-  severity: 'critical' | 'warning';
-  actualValues: Record<string, unknown>;
 }
 
 export interface StoreState {
@@ -52,7 +37,6 @@ export interface StoreState {
   onNodesChange: (changes: NodeChange<Node<NodeData>>[]) => void;
   onEdgesChange: (changes: EdgeChange[]) => void;
   onConnect: (connection: { source: string; target: string; sourceHandle?: string | null; targetHandle?: string | null }) => void;
-  setUnitCosts: (costs: Record<string, number>) => void;
   setUnitCost: (type: string, cost: number) => void;
   applyDelta: (delta: Record<string, Record<string, unknown>>) => void;
 
@@ -64,19 +48,11 @@ export interface StoreState {
   setRunning: (running: boolean) => void;
   pushTick: (raw: Record<string, unknown>) => void;
   clearTelemetry: () => void;
-  clear: () => void; // alias for clearTelemetry
 
   // --- Plugins ---
   plugins: Record<string, string>;
   setPlugin: (nodeType: string, code: string) => void;
   removePlugin: (nodeType: string) => void;
-  clearAllPlugins: () => void;
-  getPlugin: (nodeType: string) => string | undefined;
-
-  // --- Invariant Violations ---
-  violations: InvariantViolation[];
-  addViolation: (v: InvariantViolation) => void;
-  clearViolations: () => void;
 }
 
 export const useStore = create<StoreState>((set, get) => ({
@@ -117,9 +93,6 @@ export const useStore = create<StoreState>((set, get) => ({
     };
     set({ edges: [...get().edges, newEdge] });
   },
-  setUnitCosts: (costs) => {
-    set({ unitCosts: costs });
-  },
   setUnitCost: (type, cost) => {
     set((state) => ({ unitCosts: { ...state.unitCosts, [type]: cost } }));
   },
@@ -131,15 +104,15 @@ export const useStore = create<StoreState>((set, get) => ({
           hasChanges = true;
           return {
             ...node,
-            data: { ...node.data, ...delta[node.id] }
+            data: {
+              ...node.data,
+              ...delta[node.id]
+            }
           };
         }
         return node;
       });
-      if (hasChanges) {
-        return { nodes: newNodes };
-      }
-      return state;
+      return hasChanges ? { nodes: newNodes } : state;
     });
   },
 
@@ -150,31 +123,20 @@ export const useStore = create<StoreState>((set, get) => ({
   maxBufferSize: 600,
   setRunning: (running) => set({ isRunning: running }),
   pushTick: (raw) => {
-    const tickData = raw as {
-      tick: number;
-      events?: string[];
-      nodes?: Record<string, {
-        throughput?: number;
-        queue_depth?: number;
-        drop_rate?: number;
-      }>;
-    };
-    
     let totalThroughput = 0;
     let totalQueue = 0;
     let totalDropped = 0;
-    
-    if (tickData.nodes) {
-      Object.values(tickData.nodes).forEach(n => {
-        totalThroughput += n.throughput || 0;
-        totalQueue += n.queue_depth || 0;
-        totalDropped += n.drop_rate || 0;
-      });
-    }
+
+    const rawNodes = (raw.nodes || {}) as Record<string, Record<string, unknown>>;
+    Object.values(rawNodes).forEach((nodeMetrics) => {
+      if (typeof nodeMetrics.throughput === 'number') totalThroughput += nodeMetrics.throughput;
+      if (typeof nodeMetrics.queue_depth === 'number') totalQueue += nodeMetrics.queue_depth;
+      if (typeof nodeMetrics.drop_rate === 'number') totalDropped += nodeMetrics.drop_rate;
+    });
 
     const newTick: TelemetryTick = {
-      tick: tickData.tick || 0,
-      events: tickData.events || [],
+      tick: typeof raw.tick === 'number' ? raw.tick : get().buffer.length,
+      timestamp: Date.now(),
       totalThroughput,
       totalQueue,
       totalDropped,
@@ -182,19 +144,16 @@ export const useStore = create<StoreState>((set, get) => ({
     };
 
     set((state) => {
-      const newBuffer = [...state.buffer, newTick];
-      if (newBuffer.length > state.maxBufferSize) {
-        newBuffer.shift();
-      }
-      const newRaw = [...state.rawHistory, raw];
-      if (newRaw.length > state.maxBufferSize) {
-        newRaw.shift();
-      }
-      return { buffer: newBuffer, rawHistory: newRaw };
+      const buffer = state.buffer.length >= state.maxBufferSize
+        ? [...state.buffer.slice(1), newTick]
+        : [...state.buffer, newTick];
+      const rawHistory = state.rawHistory.length >= state.maxBufferSize
+        ? [...state.rawHistory.slice(1), raw]
+        : [...state.rawHistory, raw];
+      return { buffer, rawHistory };
     });
   },
   clearTelemetry: () => set({ buffer: [], rawHistory: [] }),
-  clear: () => set({ buffer: [], rawHistory: [] }),
 
   // --- Plugins ---
   plugins: {},
@@ -205,12 +164,5 @@ export const useStore = create<StoreState>((set, get) => ({
     const next = { ...state.plugins };
     delete next[nodeType];
     return { plugins: next };
-  }),
-  clearAllPlugins: () => set({ plugins: {} }),
-  getPlugin: (nodeType) => get().plugins[nodeType],
-
-  // --- Invariants ---
-  violations: [],
-  addViolation: (v) => set((state) => ({ violations: [...state.violations, v] })),
-  clearViolations: () => set({ violations: [] })
+  })
 }));

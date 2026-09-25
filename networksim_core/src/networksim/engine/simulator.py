@@ -1,7 +1,8 @@
 """Main simulator orchestration."""
 import asyncio
 import random
-from typing import Dict, Any, List, AsyncGenerator, Optional
+from collections.abc import AsyncGenerator
+from typing import Any
 from networksim.models import CanvasGraph
 from networksim.engine.graph import SimGraph
 from networksim.engine.physics import NodeState, evaluate_node_physics
@@ -20,13 +21,13 @@ class NetworkSimulator:
     load profile, the output is byte-identical across runs.
     """
     
-    def __init__(self, graph: CanvasGraph, duration_ticks: int, failures: List[Dict[str, Any]], chaos_mode: bool = False, seed: int = 0, plugin_registry=None):
+    def __init__(self, graph: CanvasGraph, duration_ticks: int, failures: list[dict[str, Any]], chaos_mode: bool = False, seed: int = 0, plugin_registry=None):
         self.plugin_registry = plugin_registry
         node_ids = list(graph.nodes.keys())
         edges = [(edge.source, edge.target) for edge in graph.edges]
         self.graph = SimGraph(node_ids, edges)
         
-        self.state: Dict[str, NodeState] = {
+        self.state: dict[str, NodeState] = {
             nid: NodeState.from_pydantic(nid, model)
             for nid, model in graph.nodes.items()
         }
@@ -39,9 +40,9 @@ class NetworkSimulator:
         self.delta_tracker = DeltaTracker(node_ids)
         self.chaos_engine = ChaosEngine(self.rng) if chaos_mode else None
         
-    def _step(self, tick: int) -> List[str]:
+    def _step(self, tick: int) -> list[str]:
         """Perform physics, failure, chaos, and plugin processing for a single tick."""
-        events: List[str] = []
+        events: list[str] = []
         
         # 1. Apply scheduled failure injections
         for f in self.failures:
@@ -102,13 +103,13 @@ class NetworkSimulator:
             }
             await asyncio.sleep(0)
             
-    def run_sync(self) -> List[dict]:
+    def run_sync(self) -> list[dict]:
         """Synchronous version for CLI and tests. Returns all ticks as a list of delta dicts."""
         async def _run():
             return [tick async for tick in self.run()]
         return asyncio.run(_run())
 
-    def run_snapshots(self) -> List[Any]:
+    def run_snapshots(self) -> list[Any]:
         """Synchronous full execution returning a list of SimulationTickResult models."""
         from networksim.models import BaseNodeData, SimulationTickResult
         history = []
@@ -138,14 +139,13 @@ class NetworkSimulator:
         """Calculate incoming traffic for a node, splitting across active successors."""
         if node_state.node_type == "client":
             return node_state.base_rps * node_state.burst_factor
-        
+
         incoming = 0.0
-        preds = self.graph.predecessors(node_id)
-        for p in preds:
+        for p in self.graph.predecessors(node_id):
             pred_node = self.state[p]
             succs = self.graph.successors(p)
-            # Only split traffic among non-failed successors
-            active_succs = [s for s in succs if self.state[s].status != "failed"]
-            if node_id in active_succs and len(active_succs) > 0:
-                incoming += pred_node.current_rps / len(active_succs)
+            # Count active (non-failed) successors in O(deg) without list alloc
+            active_count = sum(1 for s in succs if self.state[s].status != "failed")
+            if active_count > 0 and self.state[node_id].status != "failed":
+                incoming += pred_node.current_rps / active_count
         return incoming

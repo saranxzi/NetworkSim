@@ -120,7 +120,7 @@ async def handle_simulation_ws(websocket: WebSocket) -> None:
             
             # Step 4: Stream ticks with adaptive interval
             tick_interval = DEFAULT_TICK_INTERVAL
-            full_state: Dict[str, dict] = {}  # Accumulated state for traces
+            full_state: dict[str, dict] = {}  # Accumulated state for traces
             
             async for tick_data in simulator.run():
                 # Merge deltas into full state for trace generation

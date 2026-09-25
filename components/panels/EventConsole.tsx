@@ -1,16 +1,10 @@
 "use client";
 
-import React, { useEffect, useRef, useMemo } from 'react';
+import React, { memo, useEffect, useRef, useMemo } from 'react';
 import { Terminal, AlertTriangle, Zap } from 'lucide-react';
 
-interface TickData {
-  tick: number;
-  events: string[];
-  nodes: Record<string, unknown>;
-}
-
-interface EventConsoleProps {
-  history: TickData[];
+export interface EventConsoleProps {
+  history: Record<string, unknown>[];
 }
 
 interface LogEntry {
@@ -24,50 +18,45 @@ function getLogEntry(tick: number, evt: string): LogEntry {
   let rec = "";
   let type = "info";
 
-  if (evt.includes("CHAOS DAEMON")) {
-    if (evt.includes("db_") || evt.includes("database") || evt.includes("cassandra")) {
-      rec = "Promote Read Replica to Master or increase DB IOPS.";
-    } else if (evt.includes("cdn_") || evt.includes("dns")) {
-      rec = "Shift edge routing to adjacent geographic POP.";
-    } else if (evt.includes("api_") || evt.includes("svc") || evt.includes("server")) {
-      rec = "Auto-scale API pods or implement aggressive caching.";
-    } else if (evt.includes("mq_") || evt.includes("kafka")) {
-      rec = "Increase topic partitions and scale consumer worker groups.";
-    } else if (evt.includes("work_") || evt.includes("encoder") || evt.includes("flink")) {
-      rec = "Scale Horizontal Pod Autoscaler to process backlog queue.";
-    } else if (evt.includes("alb_") || evt.includes("lb") || evt.includes("gateway")) {
-      rec = "Scale up ingress load balancer capacity matrix.";
-    } else {
-      rec = "Deploy redundant sibling cluster to heal grid.";
-    }
-    type = "chaos";
-  } else if (evt.includes("Capacity exceeded")) {
-    rec = "Scale horizontally or increase processing capacity.";
+  if (evt.includes("Capacity exceeded")) {
+    rec = "Autoscale node capacity or attach an upstream Message Queue / Cache.";
     type = "warning";
-  } else if (evt.includes("Injected failure")) {
-    rec = "Ensure external circuit breakers are configured.";
-    type = "error";
+  } else if (evt.includes("Injected failure") || evt.includes("simulated fault")) {
+    rec = "Verify circuit breaker triggers and traffic reroutes to fallback paths.";
+    type = "chaos";
+  } else if (evt.includes("Chaos strike")) {
+    rec = "Chaos monkey struck! Ensure redundancy/failover replicas are provisioned.";
+    type = "chaos";
+  } else if (evt.includes("Recovery")) {
+    rec = "Node healthy again. Backlog is draining.";
+    type = "info";
   } else {
-    rec = "Monitor downstream dependencies.";
+    rec = "Normal system event.";
+    type = "info";
   }
 
-  return { tick, rawMsg: evt, recommendation: rec, type };
+  return {
+    tick,
+    rawMsg: evt,
+    recommendation: rec,
+    type
+  };
 }
 
-export default function EventConsole({ history }: EventConsoleProps) {
+const EventConsole = memo(function EventConsole({ history }: EventConsoleProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // PERF-6: Memoize log stream computation instead of rebuilding on every render
   const logStream = useMemo(() => {
     const logs: LogEntry[] = [];
     (history || []).forEach(tickObj => {
-      if (tickObj.events && tickObj.events.length > 0) {
-        tickObj.events.forEach((evt: string) => {
-          logs.push(getLogEntry(tickObj.tick, evt));
-        });
-      }
+      const events = Array.isArray(tickObj.events) ? (tickObj.events as string[]) : [];
+      const tick = typeof tickObj.tick === 'number' ? tickObj.tick : 0;
+      events.forEach((evt: string) => {
+        logs.push(getLogEntry(tick, evt));
+      });
     });
-    return logs;
+    // Keep last 200 logs to prevent unbounded DOM growth
+    return logs.slice(-200);
   }, [history]);
 
   // Auto-scroll to bottom of logs
@@ -98,7 +87,7 @@ export default function EventConsole({ history }: EventConsoleProps) {
           <div className="text-gray-600 italic text-center mt-auto mb-auto">Awaiting telemetry...</div>
         ) : (
           logStream.map((log, i) => (
-            <div key={i} className="flex flex-col gap-1 border-l-2 pl-3 border-white/5 pb-2 border-b border-b-transparent relative group transition-colors hover:bg-white/5 py-1 -ml-3 px-3">
+            <div key={`${log.tick}-${i}-${log.rawMsg}`} className="flex flex-col gap-1 border-l-2 pl-3 border-white/5 pb-2 border-b border-b-transparent relative group transition-colors hover:bg-white/5 py-1 -ml-3 px-3">
               <div className="flex items-start gap-2">
                 <span className="text-gray-500 shrink-0 select-none">[{String(log.tick).padStart(2, '0')}]</span>
                 <span className={`flex-1 break-words font-semibold 
@@ -125,4 +114,6 @@ export default function EventConsole({ history }: EventConsoleProps) {
       </div>
     </div>
   );
-}
+});
+
+export default EventConsole;

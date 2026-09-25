@@ -16,11 +16,11 @@ class RunCreate(BaseModel):
     seed: int
     status: str
     total_ticks: int
-    p99_latency_ms: Optional[float] = None
+    p99_latency_ms: float | None = None
     total_dropped: int = 0
-    invariant_violations: Optional[dict] = None
-    summary_markdown: Optional[str] = None
-    duration_seconds: Optional[float] = None
+    invariant_violations: dict | None = None
+    summary_markdown: str | None = None
+    duration_seconds: float | None = None
 
 class RunResponse(BaseModel):
     id: str
@@ -29,12 +29,12 @@ class RunResponse(BaseModel):
     seed: int
     status: str
     total_ticks: int
-    p99_latency_ms: Optional[float]
+    p99_latency_ms: float | None = None
     total_dropped: int
-    invariant_violations: Optional[dict]
-    summary_markdown: Optional[str]
+    invariant_violations: dict | None = None
+    summary_markdown: str | None = None
     executed_at: datetime
-    duration_seconds: Optional[float]
+    duration_seconds: float | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -65,7 +65,7 @@ async def record_run(
     await db.flush()
     return run
 
-@router.get("", response_model=List[RunResponse])
+@router.get("", response_model=list[RunResponse])
 async def list_runs(
     blueprint_id: str = Query(..., description="The blueprint ID to fetch runs for"),
     db: AsyncSession = Depends(get_db),

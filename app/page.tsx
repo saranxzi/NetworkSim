@@ -96,7 +96,7 @@ export default function LabPage() {
       } as Node<NodeData>;
     }).filter((n): n is NonNullable<typeof n> => n !== null);
     
-    const graphEdges = (graph.edges as unknown) as Array<{ source: string; target: string }>;
+    const graphEdges = (graph.edges || []) as Array<{ source: string; target: string }>;
     const newEdges = graphEdges.map((e, i: number) => ({
       id: `e_${i}`,
       source: e.source,
@@ -589,7 +589,7 @@ export default function LabPage() {
           </button>
 
           {/* Real-time Console */}
-          <EventConsole history={rawHistory as unknown as { tick: number; events: string[]; nodes: Record<string, unknown> }[]} />
+          <EventConsole history={rawHistory} />
 
         </aside>
       </div>

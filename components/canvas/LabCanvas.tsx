@@ -37,29 +37,37 @@ function Flow() {
         y: event.clientY,
       });
 
-      let defaultData: Record<string, unknown> = {};
-      if (data.type === 'client') defaultData = { base_rps: 150 };
-      else if (data.type === 'load_balancer') defaultData = { capacity: 5000 };
-      else if (data.type === 'api_server') defaultData = { capacity: 1000 };
-      else if (data.type === 'cache') defaultData = { capacity: 5000 };
-      else if (data.type === 'database') defaultData = { write_capacity: 500, capacity: 500 }; 
-      else if (data.type === 'message_queue') defaultData = { capacity: 10000 };
-      else if (data.type === 'cdn') defaultData = { capacity: 20000 };
-      else if (data.type === 'dns') defaultData = { capacity: 50000 };
-      else if (data.type === 'object_store') defaultData = { capacity: 10000 };
-      else if (data.type === 'serverless') defaultData = { capacity: 5000 };
-      else if (data.type === 'worker') defaultData = { capacity: 500 };
+      const defaultCapacities: Record<string, Record<string, number>> = {
+        client: { base_rps: 150 },
+        load_balancer: { capacity: 5000 },
+        api_server: { capacity: 1000 },
+        cache: { capacity: 5000 },
+        database: { write_capacity: 500, capacity: 500 },
+        message_queue: { capacity: 10000 },
+        cdn: { capacity: 20000 },
+        dns: { capacity: 50000 },
+        object_store: { capacity: 10000 },
+        serverless: { capacity: 5000 },
+        worker: { capacity: 500 },
+      };
+
+      const defaultData = defaultCapacities[data.type] || { capacity: 1000 };
 
       const newNode: Node<NodeData> = {
         id: `${data.type}_${Date.now()}`,
         type: data.type,
         position,
-        data: { label: data.label, type: data.type, ...defaultData },
+        data: {
+          label: data.label,
+          type: data.type,
+          status: 'healthy',
+          ...defaultData,
+        },
       };
 
-      setNodes([...nodes, newNode]);
+      setNodes((prev) => [...prev, newNode]);
     },
-    [nodes, setNodes, screenToFlowPosition],
+    [setNodes, screenToFlowPosition],
   );
 
   return (
@@ -96,10 +104,10 @@ export default function LabCanvas() {
   useEffect(() => {
     // E-commerce template by default
     setNodes([
-      { id: 'client_1', type: 'client', position: { x: 100, y: 300 }, data: { label: 'Shoppers', type: 'client', base_rps: 150 } },
-      { id: 'alb_1', type: 'load_balancer', position: { x: 400, y: 300 }, data: { label: 'ALB', type: 'load_balancer', capacity: 5000 } },
-      { id: 'api_1', type: 'api_server', position: { x: 700, y: 300 }, data: { label: 'Checkout API', type: 'api_server', capacity: 200 } },
-      { id: 'db_1', type: 'database', position: { x: 1000, y: 300 }, data: { label: 'Transactions DB', type: 'database', capacity: 150 } },
+      { id: 'client_1', type: 'client', position: { x: 100, y: 300 }, data: { label: 'Shoppers', type: 'client', status: 'healthy', base_rps: 150 } },
+      { id: 'alb_1', type: 'load_balancer', position: { x: 400, y: 300 }, data: { label: 'ALB', type: 'load_balancer', status: 'healthy', capacity: 5000 } },
+      { id: 'api_1', type: 'api_server', position: { x: 700, y: 300 }, data: { label: 'Checkout API', type: 'api_server', status: 'healthy', capacity: 200 } },
+      { id: 'db_1', type: 'database', position: { x: 1000, y: 300 }, data: { label: 'Transactions DB', type: 'database', status: 'healthy', capacity: 150 } },
     ]);
     setEdges([
       { id: 'e1', source: 'client_1', target: 'alb_1', animated: true, style: { stroke: '#4b5563', strokeWidth: 2 } },
