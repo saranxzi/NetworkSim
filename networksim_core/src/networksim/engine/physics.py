@@ -38,6 +38,8 @@ class NodeState:
         else:
             effective_capacity = raw_capacity or 1000.0
         
+        # Runtime telemetry in the payload (status/throughput/queues) belongs to
+        # a previous run and must not leak in: every run starts clean.
         return cls(
             id=nid,
             label=model.label,
@@ -46,11 +48,11 @@ class NodeState:
             base_latency=getattr(model, "base_latency", None) or 10.0,
             base_rps=getattr(model, "base_rps", None) or 0.0,
             burst_factor=getattr(model, "burst_factor", None) or 1.0,
-            status=model.status,
-            current_rps=model.throughput,
-            queue_depth=model.queue_depth,
-            drop_rate=model.drop_rate,
-            current_latency=model.latency,
+            status="healthy",
+            current_rps=0.0,
+            queue_depth=0,
+            drop_rate=0.0,
+            current_latency=0.0,
         )
 
 # Maximum queue buffer per node
