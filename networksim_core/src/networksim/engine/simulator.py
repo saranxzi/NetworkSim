@@ -44,13 +44,14 @@ class NetworkSimulator:
         """Perform physics, failure, chaos, and plugin processing for a single tick."""
         events: list[str] = []
         
-        # 1. Apply scheduled failure injections
+        # 1. Apply scheduled failure injections (clients generate traffic and
+        # cannot be "failed"; skipping them avoids re-firing the event each tick)
         for f in self.failures:
             start = f.get("start_tick", 0)
             end = f.get("end_tick", 999999)
             if start <= tick <= end:
                 nid = f.get("node_id")
-                if nid in self.state and self.state[nid].status != "failed":
+                if nid in self.state and self.state[nid].node_type != "client" and self.state[nid].status != "failed":
                     self.state[nid].status = "failed"
                     self.state[nid].capacity = 0.0
                     events.append(f"Injected failure at {nid}")
