@@ -18,7 +18,18 @@ class SimGraph:
         try:
             self._topo_order = [self._idx_to_name[i] for i in self._g.topological_sorting()]
         except igraph.InternalError:
-            self._topo_order = [self._idx_to_name[i] for i in self._g.bfs(0)[0]]
+            # Cyclic graph: fall back to BFS from every unvisited vertex so all
+            # components are covered and no node is silently skipped.
+            visited: set[int] = set()
+            order: list[int] = []
+            for start in range(len(node_ids)):
+                if start in visited:
+                    continue
+                for idx in self._g.bfs(start)[0]:
+                    if idx not in visited:
+                        visited.add(idx)
+                        order.append(idx)
+            self._topo_order = [self._idx_to_name[i] for i in order]
 
         # Precompute adjacency lists once — graph is static during simulation.
         # Eliminates O(V) list allocation per predecessors/successors call.

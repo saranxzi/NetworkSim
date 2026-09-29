@@ -38,3 +38,15 @@ def test_simgraph_cycle_fallback():
     assert set(graph.topo_order) == {"a", "b", "c"}
     assert graph.predecessors("a") == ["c"]
     assert graph.successors("a") == ["b"]
+
+def test_simgraph_cycle_fallback_keeps_disconnected_nodes():
+    node_ids = ["a", "b", "c", "x", "y"]
+    edges = [("a", "b"), ("b", "c"), ("c", "a"), ("x", "y")]
+    graph = SimGraph(node_ids, edges)
+
+    # BFS from a single vertex would drop the second component
+    assert set(graph.topo_order) == {"a", "b", "c", "x", "y"}
+
+def test_simgraph_unknown_edge_raises_clear_error():
+    with pytest.raises(KeyError):
+        SimGraph(["a"], [("a", "ghost")])
