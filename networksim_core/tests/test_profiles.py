@@ -26,3 +26,19 @@ def test_soak_profile():
     p = soak_profile(constant_rps=250.0)
     assert p(0) == 250.0
     assert p(100) == 250.0
+
+def test_build_profile():
+    from networksim.load_profiles import build_profile
+
+    p = build_profile({"type": "soak", "params": {"constant_rps": 42.0}})
+    assert p is not None and p(0) == 42.0
+
+    p = build_profile({"type": "ramp", "params": {"start_rps": 0.0, "peak_rps": 10.0, "ramp_ticks": 2}})
+    assert p is not None and p(2) == 10.0
+
+    # Unknown types, missing params, and bad shapes are ignored, not fatal
+    assert build_profile({"type": "unknown", "params": {}}) is None
+    assert build_profile({"type": "ramp", "params": {"bogus": 1}}) is None
+    assert build_profile({"type": "ramp", "params": "not-a-dict"}) is None
+    assert build_profile(None) is None
+    assert build_profile("garbage") is None

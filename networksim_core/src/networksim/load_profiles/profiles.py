@@ -44,3 +44,31 @@ def soak_profile(constant_rps: float) -> Callable[[int], float]:
     def profile(tick: int) -> float:
         return constant_rps
     return profile
+
+
+_PROFILE_FACTORIES: dict[str, Callable[..., Callable[[int], float]]] = {
+    "ramp": ramp_profile,
+    "spike": spike_profile,
+    "diurnal": diurnal_profile,
+    "soak": soak_profile,
+}
+
+
+def build_profile(config: dict | None) -> Callable[[int], float] | None:
+    """Build a tick->rps callable from a {'type': ..., 'params': {...}} config.
+
+    Returns None for missing, malformed, or unknown configs so callers can
+    treat the load profile as optional.
+    """
+    if not isinstance(config, dict):
+        return None
+    factory = _PROFILE_FACTORIES.get(config.get("type"))
+    if factory is None:
+        return None
+    params = config.get("params")
+    if not isinstance(params, dict):
+        return None
+    try:
+        return factory(**params)
+    except TypeError:
+        return None

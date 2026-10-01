@@ -21,7 +21,7 @@ class NetworkSimulator:
     load profile, the output is byte-identical across runs.
     """
     
-    def __init__(self, graph: CanvasGraph, duration_ticks: int, failures: list[dict[str, Any]], chaos_mode: bool = False, seed: int = 0, plugin_registry=None):
+    def __init__(self, graph: CanvasGraph, duration_ticks: int, failures: list[dict[str, Any]], chaos_mode: bool = False, seed: int = 0, plugin_registry=None, load_profile: dict | None = None):
         self.plugin_registry = plugin_registry
         node_ids = list(graph.nodes.keys())
         edges = [(edge.source, edge.target) for edge in graph.edges]
@@ -35,6 +35,17 @@ class NetworkSimulator:
         self.duration_ticks = duration_ticks
         self.failures = failures
         self.chaos_mode = chaos_mode
+        
+        # Optional per-tick load profile: distributes the profile's total RPS
+        # across client nodes proportionally to their configured base_rps.
+        from networksim.load_profiles import build_profile
+        self._profile_fn = build_profile(load_profile)
+        client_ids = [nid for nid in node_ids if self.state[nid].node_type == "client"]
+        total_base = sum(self.state[nid].base_rps for nid in client_ids)
+        self._client_shares = {
+            nid: (self.state[nid].base_rps / total_base) if total_base > 0 else 1.0 / len(client_ids)
+            for nid in client_ids
+        }
         
         self.rng = random.Random(seed)
         self.delta_tracker = DeltaTracker(node_ids)
@@ -60,6 +71,12 @@ class NetworkSimulator:
         if self.chaos_engine:
             chaos_events = self.chaos_engine.maybe_strike(tick, self.state)
             events.extend(chaos_events)
+        
+        # 2b. Apply load profile to client traffic for this tick
+        if self._profile_fn is not None:
+            target_rps = max(0.0, self._profile_fn(tick))
+            for nid, share in self._client_shares.items():
+                self.state[nid].base_rps = target_rps * share
             
         # 3. Reset non-client throughputs
         for node in self.state.values():

@@ -75,3 +75,43 @@ def on_tick(state, incoming_rps):
 
     assert tick0["nodes"]["api"]["throughput"] == 100.0
     assert tick0["nodes"]["db"]["throughput"] == 100.0
+
+
+def test_load_profile_drives_client_traffic():
+    nodes = {
+        "c1": ClientData(label="Client", base_rps=100.0),
+        "api": ApiServerData(label="API", capacity=10000.0, base_latency=10.0),
+    }
+    graph = CanvasGraph(nodes=nodes, edges=[Edge(source="c1", target="api")])
+    profile = {"type": "ramp", "params": {"start_rps": 100.0, "peak_rps": 500.0, "ramp_ticks": 4}}
+    sim = NetworkSimulator(graph, duration_ticks=5, failures=[], seed=0,
+                           load_profile=profile)
+    api_rps = [t["nodes"]["api"]["throughput"] for t in sim.run_sync()]
+    assert api_rps == [100.0, 200.0, 300.0, 400.0, 500.0]
+
+
+def test_load_profile_scales_clients_proportionally():
+    nodes = {
+        "c_big": ClientData(label="Big", base_rps=300.0),
+        "c_small": ClientData(label="Small", base_rps=100.0),
+        "api": ApiServerData(label="API", capacity=100000.0, base_latency=10.0),
+    }
+    edges = [
+        Edge(source="c_big", target="api"),
+        Edge(source="c_small", target="api"),
+    ]
+    graph = CanvasGraph(nodes=nodes, edges=edges)
+    profile = {"type": "soak", "params": {"constant_rps": 400.0}}
+
+    sim = NetworkSimulator(graph, duration_ticks=1, failures=[], seed=0, load_profile=profile)
+    tick0 = sim.run_sync()[0]
+
+    assert tick0["nodes"]["c_big"]["throughput"] == 300.0
+    assert tick0["nodes"]["c_small"]["throughput"] == 100.0
+
+
+def test_malformed_load_profile_is_ignored():
+    sim = NetworkSimulator(_chain_graph(), duration_ticks=1, failures=[], seed=0,
+                           load_profile={"type": "nonsense", "params": {}})
+    tick0 = sim.run_sync()[0]
+    assert tick0["nodes"]["api"]["throughput"] == 100.0
