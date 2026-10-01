@@ -28,6 +28,9 @@ jobs:
       - name: Run engine tests
         run: python -m pytest networksim_core/tests/ -v --tb=short
 
+      - name: Run backend tests
+        run: python -m pytest backend/tests/ -v --tb=short
+
       - name: Check backend imports
         run: python -c "from app.main import app; print(f'{len(app.routes)} routes OK')"
         working-directory: backend
