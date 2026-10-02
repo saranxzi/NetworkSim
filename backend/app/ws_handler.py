@@ -88,11 +88,31 @@ async def handle_simulation_ws(websocket: WebSocket) -> None:
             )
             return
         
-        duration = min(int(payload.get("duration_ticks", 60)), MAX_TICKS)
-        failures = payload.get("failures_injected", [])
+        try:
+            duration = max(1, min(int(payload.get("duration_ticks", 60)), MAX_TICKS))
+            seed = int(payload.get("seed", 0))
+        except (TypeError, ValueError):
+            await websocket.close(code=1007, reason="Invalid numeric parameters")
+            return
+
+        failures = payload.get("failures_injected") or []
+        if not isinstance(failures, list):
+            failures = []
         chaos_mode = bool(payload.get("chaos_mode", False))
-        seed = int(payload.get("seed", 0))
         enable_tracing = bool(payload.get("enable_tracing", True))
+        load_profile = payload.get("load_profile")
+        if not isinstance(load_profile, dict):
+            load_profile = None
+
+        # Optional per-node-type plugin overrides, executed in a sandbox
+        plugin_registry = None
+        plugins = payload.get("plugins")
+        if isinstance(plugins, dict) and plugins:
+            from networksim.plugins.registry import PluginRegistry
+            plugin_registry = PluginRegistry()
+            for node_type, source in plugins.items():
+                if isinstance(node_type, str) and isinstance(source, str):
+                    plugin_registry.register(node_type, source)
         
         # Step 3: Build simulator
         try:
@@ -104,6 +124,8 @@ async def handle_simulation_ws(websocket: WebSocket) -> None:
                 failures=failures,
                 chaos_mode=chaos_mode,
                 seed=seed,
+                plugin_registry=plugin_registry,
+                load_profile=load_profile,
             )
             
             # Optional: trace generator for waterfall view
