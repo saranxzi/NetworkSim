@@ -2,7 +2,7 @@ import logging
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from pydantic import BaseModel, ConfigDict
 from app.deps import get_db, get_current_user, CurrentUser
 from app.db_models import Workspace, Blueprint, BlueprintVersion
@@ -41,6 +41,9 @@ class BlueprintResponse(BaseModel):
 class BlueprintWithLatestVersion(BlueprintResponse):
     latest_version: BlueprintVersionResponse | None = None
 
+class BlueprintSummaryResponse(BlueprintResponse):
+    version_count: int = 0
+
 async def _get_default_workspace(db: AsyncSession, user: CurrentUser) -> str:
     stmt = select(Workspace).where(Workspace.owner_id == user.id)
     result = await db.execute(stmt)
@@ -78,16 +81,32 @@ async def create_blueprint(
     await db.flush()
     return blueprint
 
-@router.get("", response_model=list[BlueprintResponse])
+@router.get("", response_model=list[BlueprintSummaryResponse])
 async def list_blueprints(
     db: AsyncSession = Depends(get_db),
     user: CurrentUser = Depends(get_current_user)
 ):
-    """List blueprints for user."""
+    """List blueprints for user, with version counts."""
     workspace_id = await _get_default_workspace(db, user)
     stmt = select(Blueprint).where(Blueprint.workspace_id == workspace_id)
     result = await db.execute(stmt)
-    return result.scalars().all()
+    blueprints = result.scalars().all()
+
+    counts: dict[str, int] = {}
+    if blueprints:
+        c_res = await db.execute(
+            select(BlueprintVersion.blueprint_id, func.count(BlueprintVersion.id))
+            .where(BlueprintVersion.blueprint_id.in_([bp.id for bp in blueprints]))
+            .group_by(BlueprintVersion.blueprint_id)
+        )
+        counts = dict(c_res.all())
+
+    responses = []
+    for bp in blueprints:
+        resp = BlueprintSummaryResponse.model_validate(bp)
+        resp.version_count = counts.get(bp.id, 0)
+        responses.append(resp)
+    return responses
 
 @router.get("/{id}", response_model=BlueprintWithLatestVersion)
 async def get_blueprint(
