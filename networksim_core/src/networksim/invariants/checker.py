@@ -1,9 +1,13 @@
-"""Invariant rule checker with pre-compiled expressions."""
+"""Invariant rule checker with pre-validated, sandboxed expressions.
+
+Rules are plain comparison expressions evaluated with `simpleeval` (restricted
+grammar, no arbitrary attribute traversal) instead of raw `eval`.
+"""
 import ast
 from dataclasses import dataclass
+from simpleeval import simple_eval
 from networksim.invariants.loader import InvariantRule
 
-_NO_BUILTINS = {"__builtins__": {}}
 
 @dataclass(slots=True)
 class Violation:
@@ -15,30 +19,30 @@ class Violation:
     actual_values: dict[str, object]
 
 class InvariantChecker:
-    __slots__ = ['rules', 'violations', '_compiled_rules']
+    __slots__ = ['rules', 'violations']
 
     def __init__(self, rules: list[InvariantRule]):
         self.rules = rules
         self.violations: list[Violation] = []
-        # Pre-compile all rule expressions at init time
-        self._compiled_rules: dict[str, ast.Expression] = {}
+        # Validate all rule expressions at init time: broken or unsafe rules
+        # should fail loudly instead of surfacing mid-simulation.
         for rule in rules:
             try:
                 parsed = ast.parse(rule.rule, mode='eval')
-                compiled = compile(parsed, f'<rule:{rule.name}>', 'eval')
-                self._compiled_rules[rule.name] = compiled
             except SyntaxError as e:
-                # Fail loudly: broken rules should be caught immediately
                 raise ValueError(
                     f"Invalid expression in rule '{rule.name}': {rule.rule} — {e}"
                 ) from e
+            for node in ast.walk(parsed):
+                if isinstance(node, ast.Attribute):
+                    raise ValueError(
+                        f"Unsafe expression in rule '{rule.name}': attribute access "
+                        f"is not allowed — {rule.rule}"
+                    )
 
     def evaluate_tick(self, tick: int, nodes: dict[str, dict]) -> list[Violation]:
         tick_violations = []
         for rule in self.rules:
-            compiled = self._compiled_rules.get(rule.name)
-            if compiled is None:
-                continue
             targets = self._resolve_targets(rule.target, nodes)
             for node_id, node_data in targets:
                 context = {
@@ -50,7 +54,7 @@ class InvariantChecker:
                     'capacity': node_data.get('capacity', 0),
                 }
                 try:
-                    result = eval(compiled, _NO_BUILTINS, context)
+                    result = simple_eval(rule.rule, names=context)
                     if not result:
                         v = Violation(
                             tick=tick,

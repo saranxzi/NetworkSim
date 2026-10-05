@@ -55,3 +55,34 @@ def test_markdown_output():
     assert 'FAILED' in md
     assert 'Test Rule' in md
     assert '| 5 |' in md
+
+
+def test_attribute_escape_rules_rejected_at_load():
+    """Rules must not traverse the object graph (sandbox escape vector)."""
+    for evil in (
+        "().__class__.__bases__[0].__subclasses__()",
+        "latency.__class__ < 5",
+    ):
+        with pytest.raises(ValueError):
+            InvariantChecker([InvariantRule(name="Escape", target="*", rule=evil)])
+
+
+def test_unknown_names_become_violations():
+    checker = InvariantChecker([InvariantRule(name="Bad Ref", target="*", rule="bogus_name < 5")])
+    nodes = {"api": {"latency": 10, "throughput": 1, "queue_depth": 0, "drop_rate": 0, "status": "healthy"}}
+    checker.evaluate_tick(0, nodes)
+    assert len(checker.violations) == 1
+    assert checker.violations[0].expression.startswith("EVAL_ERROR")
+
+
+def test_duplicate_rule_names_evaluate_independently():
+    rules = [
+        InvariantRule(name="R", target="*", rule="latency < 10"),
+        InvariantRule(name="R", target="*", rule="latency < 100"),
+    ]
+    checker = InvariantChecker(rules)
+    nodes = {"api": {"latency": 50, "throughput": 1, "queue_depth": 0, "drop_rate": 0, "status": "healthy"}}
+    checker.evaluate_tick(0, nodes)
+    # latency 50 violates the first rule only
+    assert len(checker.violations) == 1
+    assert checker.violations[0].expression == "latency < 10"
