@@ -6,9 +6,14 @@ from datetime import datetime, timezone
 def generate_junit_xml(violations: list[Violation], scenario_name: str, total_ticks: int, duration_seconds: float) -> str:
     """Generate JUnit XML format for CI/CD systems (GitHub Actions, Jenkins, GitLab CI)."""
     testsuite = ET.Element('testsuite')
+    # Group violations by rule in a single O(M) pass
+    by_rule: dict[str, list[Violation]] = defaultdict(list)
+    for v in violations:
+        by_rule[v.rule_name].append(v)
+
     testsuite.set('name', scenario_name)
-    testsuite.set('tests', str(len(set(v.rule_name for v in violations)) or 1))
-    testsuite.set('failures', str(len(violations)))
+    testsuite.set('tests', str(len(by_rule) or 1))
+    testsuite.set('failures', str(len(by_rule)))
     testsuite.set('time', f'{duration_seconds:.3f}')
     testsuite.set('timestamp', datetime.now(timezone.utc).isoformat())
     
@@ -18,11 +23,6 @@ def generate_junit_xml(violations: list[Violation], scenario_name: str, total_ti
         tc.set('classname', 'networksim.invariants')
         tc.set('time', f'{duration_seconds:.3f}')
     else:
-        # Group violations by rule in a single O(M) pass
-        by_rule: dict[str, list[Violation]] = defaultdict(list)
-        for v in violations:
-            by_rule[v.rule_name].append(v)
-
         for rule_name, rule_violations in by_rule.items():
             first_v = rule_violations[0]
             tc = ET.SubElement(testsuite, 'testcase')

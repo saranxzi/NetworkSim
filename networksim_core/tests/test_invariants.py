@@ -47,6 +47,18 @@ def test_junit_output():
     assert 'Test Rule' in xml
     assert 'failures="1"' in xml
 
+
+def test_junit_failure_count_is_rule_count():
+    """JUnit `failures` counts failed testcases (rules), not raw violations."""
+    violations = [
+        Violation(tick=1, rule_name="R1", target="api", severity="critical", expression="x", actual_values={}),
+        Violation(tick=2, rule_name="R1", target="api", severity="critical", expression="x", actual_values={}),
+        Violation(tick=3, rule_name="R2", target="db", severity="warning", expression="y", actual_values={}),
+    ]
+    xml = generate_junit_xml(violations, "S", 60, 1.0)
+    assert 'tests="2"' in xml
+    assert 'failures="2"' in xml
+
 def test_markdown_output():
     violations = [
         Violation(tick=5, rule_name="Test Rule", target="api", severity="critical", expression="latency < 100", actual_values={"latency": 200})
