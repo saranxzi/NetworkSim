@@ -25,15 +25,33 @@ class InvariantConfig:
     invariants: List[InvariantRule] = field(default_factory=list)
 
 def load_invariants(path: str) -> InvariantConfig:
-    """Load invariant rules from a YAML file."""
+    """Load invariant rules from a YAML file.
+
+    Raises ValueError with a clear message when the file is empty, the root is
+    not a mapping, or a rule entry is malformed.
+    """
     with open(path, 'r') as f:
         data = yaml.safe_load(f)
-    
+
+    if not isinstance(data, dict):
+        raise ValueError(f"{path}: expected a YAML mapping at the top level, got {type(data).__name__}")
+
+    raw_rules = data.get('invariants', [])
+    if not isinstance(raw_rules, list):
+        raise ValueError(f"{path}: 'invariants' must be a list, got {type(raw_rules).__name__}")
+
     rules = []
-    for r in data.get('invariants', []):
+    for index, r in enumerate(raw_rules):
+        if not isinstance(r, dict):
+            raise ValueError(f"{path}: invariant #{index + 1} must be a mapping, got {type(r).__name__}")
+        missing = [key for key in ('name', 'target', 'rule') if key not in r]
+        if missing:
+            raise ValueError(f"{path}: invariant #{index + 1} is missing required field(s): {', '.join(missing)}")
         trigger = None
         if 'trigger_event' in r:
             te = r['trigger_event']
+            if not isinstance(te, dict):
+                raise ValueError(f"{path}: invariant #{index + 1} 'trigger_event' must be a mapping, got {type(te).__name__}")
             trigger = ChaosEvent(
                 action=te.get('action', 'kill'),
                 target=te.get('target', ''),
