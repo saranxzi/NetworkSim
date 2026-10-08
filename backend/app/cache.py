@@ -1,4 +1,5 @@
 import os
+import time
 import logging
 from collections import OrderedDict
 
@@ -65,9 +66,14 @@ async def cache_get(key: str) -> str | None:
             return await _redis_client.get(key)
         except Exception:
             pass
-    value = _memory_cache.get(key)
-    if value is not None:
-        _memory_cache.move_to_end(key)  # LRU: mark as recently used
+    entry = _memory_cache.get(key)
+    if entry is None:
+        return None
+    expiry, value = entry
+    if expiry is not None and time.monotonic() > expiry:
+        del _memory_cache[key]
+        return None
+    _memory_cache.move_to_end(key)  # LRU: mark as recently used
     return value
 
 async def cache_set(key: str, value: str, ttl: int = 3600) -> None:
@@ -77,7 +83,9 @@ async def cache_set(key: str, value: str, ttl: int = 3600) -> None:
             return
         except Exception:
             pass
-    _memory_cache[key] = value
+    # In-memory fallback honors the same TTL as Redis.
+    expiry = time.monotonic() + ttl if ttl else None
+    _memory_cache[key] = (expiry, value)
     _memory_cache.move_to_end(key)
     while len(_memory_cache) > _MEMORY_CACHE_MAX_SIZE:
         _memory_cache.popitem(last=False)  # Evict oldest
