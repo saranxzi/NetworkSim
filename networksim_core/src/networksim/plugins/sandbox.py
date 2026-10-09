@@ -1,6 +1,5 @@
 """Sandboxed plugin execution using RestrictedPython."""
 import threading
-import ctypes
 from RestrictedPython import compile_restricted, safe_builtins
 from RestrictedPython.Guards import safer_getattr, guarded_unpack_sequence
 
