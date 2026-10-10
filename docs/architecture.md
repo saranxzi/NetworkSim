@@ -69,7 +69,7 @@ graph TD
 ## Key Directories
 
 ```
-flightsim/
+networksim/
   app/                  Next.js app directory (pages, layout)
   components/           React components (canvas, panels, telemetry, auth)
   lib/                  Zustand store, auth helpers
