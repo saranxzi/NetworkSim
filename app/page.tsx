@@ -221,15 +221,17 @@ export default function LabPage() {
 
       ws.onmessage = (event) => {
         const tickData = JSON.parse(event.data);
+
+        // Merge telemetry into nodes first: pushTick derives totals from the
+        // merged node state, since each payload is a delta.
+        if (tickData.nodes) {
+          applyDelta(tickData.nodes);
+        }
         pushTick(tickData);
 
         if (tickData.trace) {
           setLatestTrace(tickData.trace as TraceData);
           setShowTracePanel(true);
-        }
-        
-        if (tickData.nodes) {
-          applyDelta(tickData.nodes);
         }
       };
 

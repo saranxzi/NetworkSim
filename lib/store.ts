@@ -127,11 +127,13 @@ export const useStore = create<StoreState>((set, get) => ({
     let totalQueue = 0;
     let totalDropped = 0;
 
-    const rawNodes = (raw.nodes || {}) as Record<string, Record<string, unknown>>;
-    Object.values(rawNodes).forEach((nodeMetrics) => {
-      if (typeof nodeMetrics.throughput === 'number') totalThroughput += nodeMetrics.throughput;
-      if (typeof nodeMetrics.queue_depth === 'number') totalQueue += nodeMetrics.queue_depth;
-      if (typeof nodeMetrics.drop_rate === 'number') totalDropped += nodeMetrics.drop_rate;
+    // Each tick payload is a delta that may omit unchanged nodes, so totals
+    // must come from the merged node state (applyDelta runs before pushTick).
+    get().nodes.forEach((node) => {
+      const data = node.data;
+      if (typeof data.throughput === 'number') totalThroughput += data.throughput;
+      if (typeof data.queue_depth === 'number') totalQueue += data.queue_depth;
+      if (typeof data.drop_rate === 'number') totalDropped += data.drop_rate;
     });
 
     const newTick: TelemetryTick = {
