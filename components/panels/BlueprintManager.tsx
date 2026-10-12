@@ -10,17 +10,19 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 interface BlueprintSummary {
   id: string;
   name: string;
-  updatedAt: string;
-  versionCount: number;
+  updated_at: string;
+  version_count: number;
+}
+
+interface BlueprintGraph {
+  nodes: unknown[];
+  edges: unknown[];
 }
 
 interface BlueprintDetail {
   id: string;
   name: string;
-  graph: {
-    nodes: unknown[];
-    edges: unknown[];
-  };
+  latest_version: { graph_schema: BlueprintGraph } | null;
 }
 
 export default React.memo(function BlueprintManager() {
@@ -51,15 +53,23 @@ export default React.memo(function BlueprintManager() {
   };
 
   const saveBlueprint = async (authToken: string | null, name: string, graph: object): Promise<void> => {
+    const headers = {
+      'Content-Type': 'application/json',
+      ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {})
+    };
     const res = await fetch(`${API_BASE}/api/blueprints`, {
       method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {})
-      },
-      body: JSON.stringify({ name, graph }),
+      headers,
+      body: JSON.stringify({ name }),
     });
-    if (!res.ok) throw new Error('Failed to save blueprint');
+    if (!res.ok) throw new Error('Failed to create blueprint');
+    const blueprint = await res.json();
+    const versionRes = await fetch(`${API_BASE}/api/blueprints/${blueprint.id}/versions`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ graph_schema: graph }),
+    });
+    if (!versionRes.ok) throw new Error('Failed to save blueprint version');
   };
 
   const loadBlueprint = async (authToken: string | null, id: string): Promise<BlueprintDetail> => {
@@ -102,8 +112,10 @@ export default React.memo(function BlueprintManager() {
   const handleLoad = async (id: string) => {
     try {
       const detail = await loadBlueprint(token, id);
-      setNodes(detail.graph.nodes as typeof nodes);
-      setEdges(detail.graph.edges as typeof edges);
+      const graph = detail.latest_version?.graph_schema;
+      if (!graph) throw new Error('Blueprint has no saved version');
+      setNodes(graph.nodes as typeof nodes);
+      setEdges(graph.edges as typeof edges);
       showToast(`Loaded ${detail.name}`);
     } catch {
       showToast('Error loading blueprint');
@@ -156,8 +168,8 @@ export default React.memo(function BlueprintManager() {
                 </button>
               </div>
               <div className="flex items-center gap-3 text-[10px] text-gray-500">
-                <span className="flex items-center gap-1"><Clock size={10} /> {new Date(bp.updatedAt).toLocaleDateString()}</span>
-                <span className="flex items-center gap-1"><Server size={10} /> v{bp.versionCount}</span>
+                <span className="flex items-center gap-1"><Clock size={10} /> {new Date(bp.updated_at).toLocaleDateString()}</span>
+                <span className="flex items-center gap-1"><Server size={10} /> v{bp.version_count}</span>
               </div>
             </div>
           ))
