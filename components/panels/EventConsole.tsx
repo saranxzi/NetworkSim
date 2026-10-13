@@ -24,7 +24,7 @@ function getLogEntry(tick: number, evt: string): LogEntry {
   } else if (evt.includes("Injected failure") || evt.includes("simulated fault")) {
     rec = "Verify circuit breaker triggers and traffic reroutes to fallback paths.";
     type = "chaos";
-  } else if (evt.includes("Chaos strike")) {
+  } else if (evt.includes("CHAOS DAEMON")) {
     rec = "Chaos monkey struck! Ensure redundancy/failover replicas are provisioned.";
     type = "chaos";
   } else if (evt.includes("Recovery")) {
