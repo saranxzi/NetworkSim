@@ -34,7 +34,7 @@ const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000';
 export default function LabPage() {
   const { 
     nodes, edges, setNodes, setEdges, 
-    isRunning, setRunning, rawHistory, pushTick, clearTelemetry, applyDelta, unitCosts 
+    isRunning, setRunning, rawHistory, pushTick, clearTelemetry, applyDelta, unitCosts, plugins 
   } = useStore();
 
   const [templates, setTemplates] = useState<Record<string, unknown>[]>([]);
@@ -215,6 +215,7 @@ export default function LabPage() {
           failures_injected: failures,
           chaos_mode: isChaosMode,
           seed: 0,
+          plugins,
           ...(loadProfile && { load_profile: loadProfile }),
         }));
       };
