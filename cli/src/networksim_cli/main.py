@@ -72,6 +72,7 @@ def test(
         failures=failures,
         chaos_mode=False,
         seed=seed,
+        load_profile=config.load_profile or None,
     )
     
     checker = InvariantChecker(config.invariants)
