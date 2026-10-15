@@ -28,7 +28,7 @@ function isValidBlueprint(data: unknown): data is { nodes: unknown[]; edges: unk
   return true;
 }
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000';
 
 export default function LabPage() {
